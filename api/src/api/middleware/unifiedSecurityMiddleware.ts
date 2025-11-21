@@ -1,31 +1,19 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import { env } from '../config/env';
-import { UserRepository } from '../repositories/UserRepository';
-import { PermissionRepository } from '../repositories/PermissionRepository';
-import { pool } from '../database/connection.js';
-import { ActivityLogService } from '../services/ActivityLogService.js';
-
-// Extend Express Request type
-declare global {
-    namespace Express {
-        interface Request {
-            user?: {
-                userId: number;
-                email: string;
-                role: 'student' | 'instructor' | 'admin';
-                permissions: string[];
-                sessionId?: string;
-            };
-            csrfToken?: string;
-            securityContext?: {
-                ipAddress: string;
-                userAgent: string;
-                requestId: string;
-                timestamp: number;
-            };
-        }
+interface Request {
+    user?: {
+        userId: number;
+        email: string;
+        role: 'student' | 'instructor' | 'admin';
+        permissions: string[];
+        sessionId?: string;
+    };
+    csrfToken?: string;
+    securityContext?: {
+        ipAddress: string;
+        userAgent: string;
+        requestId: string;
+        timestamp: number;
+    };
+}
     }
 }
 
@@ -84,7 +72,7 @@ export class UnifiedSecurityMiddleware {
         this.userRepository = new UserRepository();
         this.permissionRepository = new PermissionRepository();
         this.activityLogService = new ActivityLogService();
-        
+
         // Start cleanup intervals
         this.startCleanupIntervals();
     }
@@ -124,7 +112,7 @@ export class UnifiedSecurityMiddleware {
                     if (!tokenResult.valid) {
                         return this.sendSecurityError(res, 401, tokenResult.error || 'Authentication required');
                     }
-                    
+
                     // Attach user to request
                     if (tokenResult.user) {
                         req.user = tokenResult.user;
@@ -315,7 +303,7 @@ export class UnifiedSecurityMiddleware {
 
         try {
             const decoded = jwt.verify(token, env.JWT_SECRET) as any;
-            
+
             // Get user from database to ensure still exists and is active
             const user = await this.userRepository.findById(decoded.userId);
             if (!user) {
@@ -328,7 +316,7 @@ export class UnifiedSecurityMiddleware {
 
             // Get user permissions
             const permissions = await this.permissionRepository.getUserPermissions(user.id);
-            
+
             return {
                 valid: true,
                 user: {
@@ -343,7 +331,7 @@ export class UnifiedSecurityMiddleware {
             if (error instanceof jwt.TokenExpiredError) {
                 return { valid: false, error: 'Token has expired' };
             }
-            
+
             if (error instanceof jwt.JsonWebTokenError) {
                 return { valid: false, error: 'Invalid token' };
             }
@@ -381,7 +369,7 @@ export class UnifiedSecurityMiddleware {
             );
 
             const failedCount = parseInt(result.rows[0]?.failed_count || '0');
-            
+
             if (failedCount >= this.config.bruteForceMaxAttempts) {
                 const retryAfter = Math.ceil(this.config.bruteForceWindowMs / 1000);
                 return { allowed: false, retryAfter };
@@ -421,7 +409,7 @@ export class UnifiedSecurityMiddleware {
         res.setHeader('X-Frame-Options', 'DENY');
         res.setHeader('X-XSS-Protection', '1; mode=block');
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-        
+
         if (config.enableCSRF) {
             res.setHeader('X-CSRF-Token-Required', 'true');
         }
@@ -468,7 +456,7 @@ export class UnifiedSecurityMiddleware {
         // Clean up expired entries every minute
         setInterval(() => {
             const now = Date.now();
-            
+
             // Clean up rate limit store
             Object.keys(rateLimitStore).forEach(key => {
                 if (rateLimitStore[key].resetTime < now) {

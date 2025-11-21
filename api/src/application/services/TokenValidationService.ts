@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
-import { pool } from '../database/connection.js';
+import { env } from '../../core/config/env';
+import { pool } from '../../infrastructure/database/connection.js';
 import crypto from 'crypto';
 
 export interface TokenPayload {

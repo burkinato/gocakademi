@@ -1,71 +1,78 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import authRoutes from './routes/auth.js';
-import docsRoutes from './routes/docs.js';
-import courseRoutes from './routes/courses.js';
-import { categoriesPublicRouter, categoriesAdminRouter } from './routes/categories.js';
-import userManagementRoutes from './routes/userManagementRoutes.js';
-import studentManagementRoutes from './routes/studentManagementRoutes.js';
-import permissionRoutes from './routes/permissionRoutes.js';
-import activityLogRoutes from './routes/activityLogRoutes.js';
-import educationRoutes from './routes/education.routes.js';
-import { authMiddleware } from './middleware/authMiddleware.js';
-import { logActivity } from './middleware/activityLogMiddleware.js';
+import { env } from './core/config/env.js';
+import { errorHandler, notFoundHandler } from './api/middleware/errorHandler.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-dotenv.config({ path: join(__dirname, '../.env.local') });
+// Routes - ONLY AUTH
+import authRoutes from './api/routes/auth.js';
+import courseRoutes from './api/routes/courses.js';
+import { categoriesPublicRouter, categoriesAdminRouter } from './api/routes/categories.js';
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// ============================================
+// 1. Security Middleware
+// ============================================
+app.use(cors({
+  origin: env.CLIENT_URL,
+  credentials: true,
+}));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
+// ============================================
+// 2. Body Parsers
+// ============================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Public routes (no auth required)
-app.use('/api/auth', authRoutes);
-app.use('/api/docs', docsRoutes);
-app.use('/api/categories', categoriesPublicRouter);
+// ============================================
+// 3. Request Logging (Development)
+// ============================================
+if (env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
+  });
+}
+
+// ============================================
+// 4. Routes
+// ============================================
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: env.NODE_ENV
+  });
 });
 
-// Protected routes (auth required)
-app.use('/api/courses', authMiddleware, courseRoutes);
-app.use('/api/education', educationRoutes); // Education routes (has its own auth)
+// Auth routes
+app.use('/api/auth', authRoutes);
 
-// Admin routes (auth + admin permissions required)
-// Activity logging middleware for all admin routes
-app.use('/api/admin', authMiddleware, logActivity);
+// Course routes (public and protected)
+app.use('/api/courses', courseRoutes);
+
+// Category routes
+app.use('/api/categories', categoriesPublicRouter);
 app.use('/api/admin/categories', categoriesAdminRouter);
-app.use('/api/admin/users', userManagementRoutes);
-app.use('/api/admin/students', studentManagementRoutes);
-app.use('/api/admin/permissions', permissionRoutes);
-app.use('/api/admin/activity-logs', activityLogRoutes);
 
-// Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    error: 'Something went wrong!'
-  });
-});
+// ============================================
+// 5. 404 Handler
+// ============================================
+app.use(notFoundHandler);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found'
-  });
-});
+// ============================================
+// 6. Global Error Handler
+// ============================================
+app.use(errorHandler);
 
 export default app;
-

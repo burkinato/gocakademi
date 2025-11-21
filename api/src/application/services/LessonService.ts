@@ -1,4 +1,4 @@
-import { LessonRepository, LessonInput } from '../repositories/LessonRepository.js';
+import { LessonRepository, LessonInput } from '../../infrastructure/repositories/LessonRepository.js';
 
 export class LessonService {
   private repo: LessonRepository;

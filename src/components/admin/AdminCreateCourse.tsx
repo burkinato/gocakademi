@@ -37,11 +37,11 @@ export const AdminCreateCourse: React.FC = () => {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [autoSaveMessage, setAutoSaveMessage] = useState<string>('');
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
-  const [categories, setCategories] = useState<Array<{id:number; name:string; parentId?:number|null; order:number}>>([]);
+  const [categories, setCategories] = useState<Array<{ id: number; name: string; parentId?: number | null; order: number }>>([]);
   const [categoryError, setCategoryError] = useState<string>('');
   const [categorySearch, setCategorySearch] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{id:string; name:string; count:number}|null>(null);
+  const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: string; name: string; count: number } | null>(null);
   const [checkingCategoryCourses, setCheckingCategoryCourses] = useState(false);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export const AdminCreateCourse: React.FC = () => {
       localStorage.setItem('curriculum_versions', JSON.stringify(versions.slice(0, 10)));
       localStorage.setItem('curriculum_draft', JSON.stringify(curriculum));
       setAutoSaveMessage('Taslak kaydedildi');
-      setTimeout(()=>setAutoSaveMessage(''), 1500);
+      setTimeout(() => setAutoSaveMessage(''), 1500);
     }, 800);
     return () => clearTimeout(handler);
   }, [curriculum]);
@@ -69,18 +69,18 @@ export const AdminCreateCourse: React.FC = () => {
   const onCategoryDrop = async (e: React.DragEvent<HTMLDivElement>, targetId: number) => {
     const draggedId = e.dataTransfer.getData('text/plain');
     if (!draggedId) return;
-    const a = categories.findIndex(c=>String(c.id)===draggedId);
-    const b = categories.findIndex(c=>c.id===targetId);
+    const a = categories.findIndex(c => String(c.id) === draggedId);
+    const b = categories.findIndex(c => c.id === targetId);
     if (a < 0 || b < 0) return;
     const next = [...categories];
-    const [item] = next.splice(a,1);
-    next.splice(b,0,item);
-    const ordered = next.map((c,i)=>({ ...c, order: i }));
+    const [item] = next.splice(a, 1);
+    next.splice(b, 0, item);
+    const ordered = next.map((c, i) => ({ ...c, order: i }));
     setCategories(ordered);
-    await apiClient.reorderCategories(ordered.map(c=>({ id: c.id, order_index: c.order })));
+    await apiClient.reorderCategories(ordered.map(c => ({ id: c.id, order_index: c.order })));
   };
 
-  const handleAskDeleteCategory = async (cat: {id:number; name:string}) => {
+  const handleAskDeleteCategory = async (cat: { id: number; name: string }) => {
     try {
       setCheckingCategoryCourses(true);
       const res = await apiClient.getCourses({ category: cat.name });
@@ -97,9 +97,9 @@ export const AdminCreateCourse: React.FC = () => {
     try {
       const res = await apiClient.getCategories();
       const rows = Array.isArray(res.data) ? res.data : [];
-      setCategories(rows.map((r:any)=>({ id: r.id, name: r.name, parentId: r.parent_id, order: r.order_index })));
+      setCategories(rows.map((r: any) => ({ id: r.id, name: r.name, parentId: r.parent_id, order: r.order_index })));
       setCategoryError('');
-    } catch (e:any) {
+    } catch (e: any) {
       setCategoryError(e?.message || 'Kategoriler yüklenemedi');
       if (categories.length === 0) {
         setCategories([
@@ -138,7 +138,7 @@ export const AdminCreateCourse: React.FC = () => {
   };
 
   const handleCoverFile = (file: File) => {
-    const allowed = ['image/png','image/jpeg','image/jpg'];
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg'];
     const maxSize = 10 * 1024 * 1024;
     if (!allowed.includes(file.type)) {
       console.error('Desteklenmeyen dosya türü');
@@ -273,24 +273,11 @@ export const AdminCreateCourse: React.FC = () => {
                 curriculum,
               };
               try {
-                const res = await fetch('/api/courses', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(localStorage.getItem('auth-storage') ? { 'Authorization': `Bearer ${JSON.parse(localStorage.getItem('auth-storage') as string).state.token}` } : {}),
-                  },
-                  body: JSON.stringify(payload),
-                });
-                const contentType = res.headers.get('content-type') || '';
-                let data: any = null;
-                if (contentType.includes('application/json')) {
-                  const text = await res.text();
-                  data = text ? JSON.parse(text) : null;
-                }
-                if (res.ok && data && data.success) {
+                const result = await apiClient.createCourse(payload);
+                if (result.success) {
                   navigate('/admin/courses');
                 } else {
-                  console.error('Create course failed', data || { status: res.status });
+                  console.error('Create course failed', result);
                 }
               } catch (e) {
                 console.error('Create course error', e);
@@ -595,8 +582,8 @@ export const AdminCreateCourse: React.FC = () => {
                     </label>
                     <div
                       className="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 p-4 text-center"
-                      onDragOver={(e)=>e.preventDefault()}
-                      onDrop={(e)=>{ e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) { const url = URL.createObjectURL(file); setNewItemContent(url);} }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) { const url = URL.createObjectURL(file); setNewItemContent(url); } }}
                     >
                       Video dosyasını buraya sürükleyin veya link girin.
                     </div>
@@ -608,7 +595,7 @@ export const AdminCreateCourse: React.FC = () => {
 
                 {newItemType === 'pdf' && (
                   <div className="space-y-2">
-                    <input type="text" className="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3" placeholder="PDF URL" onChange={(e)=>setNewItemContent(e.target.value)} />
+                    <input type="text" className="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3" placeholder="PDF URL" onChange={(e) => setNewItemContent(e.target.value)} />
                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4 text-sm text-gray-500 text-center">
                       PDF dosyasını sürükleyip bırakın veya URL girin.
                     </div>
@@ -618,18 +605,18 @@ export const AdminCreateCourse: React.FC = () => {
 
                 {newItemType === 'text' && (
                   <label className="block">
-                  <span className="text-sm font-medium text-text-light dark:text-text-dark">İçerik</span>
-                  <div className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 min-h-24 focus:ring-2 focus:ring-primary/50 dark:text-white" contentEditable role="textbox"
-                    onInput={(e) => setNewItemContent((e.target as HTMLDivElement).innerHTML)}
-                    suppressContentEditableWarning
-                  >
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<b>Kalın</b>')}>Kalın</button>
-                    <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<i>İtalik</i>')}>İtalik</button>
-                    <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<code>code</code>')}>Kod</button>
-                  </div>
-                </label>
+                    <span className="text-sm font-medium text-text-light dark:text-text-dark">İçerik</span>
+                    <div className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 min-h-24 focus:ring-2 focus:ring-primary/50 dark:text-white" contentEditable role="textbox"
+                      onInput={(e) => setNewItemContent((e.target as HTMLDivElement).innerHTML)}
+                      suppressContentEditableWarning
+                    >
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<b>Kalın</b>')}>Kalın</button>
+                      <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<i>İtalik</i>')}>İtalik</button>
+                      <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<code>code</code>')}>Kod</button>
+                    </div>
+                  </label>
                 )}
 
                 {newItemType === 'quiz' && (
@@ -641,35 +628,35 @@ export const AdminCreateCourse: React.FC = () => {
                   </div>
                 )}
 
-              <label className="block">
-                <span className="text-sm font-medium text-text-light dark:text-text-dark">Süre / Soru Sayısı</span>
-                <input
-                  type="text"
-                  className="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3 focus:ring-2 focus:ring-primary/50 dark:text-white"
-                  placeholder="Örn: 15dk veya 10 Soru"
-                  value={newItemDuration}
-                  onChange={(e) => setNewItemDuration(e.target.value)}
-                />
-              </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-text-light dark:text-text-dark">Süre / Soru Sayısı</span>
+                  <input
+                    type="text"
+                    className="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3 focus:ring-2 focus:ring-primary/50 dark:text-white"
+                    placeholder="Örn: 15dk veya 10 Soru"
+                    value={newItemDuration}
+                    onChange={(e) => setNewItemDuration(e.target.value)}
+                  />
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div className="p-6 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3">
-            <Button
-              onClick={() => setIsModalOpen(false)}
-              variant="outline"
-            >
-              İptal
-            </Button>
-            <Button
-              onClick={addItem}
-              variant="primary"
-              className="shadow-md"
-              disabled={!newItemTitle}
-            >
-              Ekle
-            </Button>
-          </div>
+            <div className="p-6 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3">
+              <Button
+                onClick={() => setIsModalOpen(false)}
+                variant="outline"
+              >
+                İptal
+              </Button>
+              <Button
+                onClick={addItem}
+                variant="primary"
+                className="shadow-md"
+                disabled={!newItemTitle}
+              >
+                Ekle
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -679,14 +666,14 @@ export const AdminCreateCourse: React.FC = () => {
           <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl border p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Kategori Yönetimi</h3>
-              <button onClick={()=>setCategoryManagerOpen(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+              <button onClick={() => setCategoryManagerOpen(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="flex gap-3 mb-3">
-              <input className="flex-1 border rounded p-2" placeholder="Ara..." value={categorySearch} onChange={(e)=>setCategorySearch(e.target.value)} />
-              <input className="border rounded p-2 text-sm" placeholder="Yeni kategori" value={newCategoryName} onChange={(e)=>setNewCategoryName(e.target.value)} />
-              <Button size="sm" onClick={async ()=>{
+              <input className="flex-1 border rounded p-2" placeholder="Ara..." value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} />
+              <input className="border rounded p-2 text-sm" placeholder="Yeni kategori" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+              <Button size="sm" onClick={async () => {
                 if (!newCategoryName.trim()) return;
                 await apiClient.createCategory({ name: newCategoryName.trim(), parentId: null });
                 setNewCategoryName('');
@@ -695,36 +682,36 @@ export const AdminCreateCourse: React.FC = () => {
             </div>
             <div className="space-y-2">
               {categories
-                .filter(c=>c.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                .sort((a,b)=>a.order-b.order)
-                .map(c=> (
+                .filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                .sort((a, b) => a.order - b.order)
+                .map(c => (
                   <div key={c.id} className="flex items-center justify-between border rounded p-2"
                     draggable
-                    onDragStart={(e)=>onCategoryDragStart(e,c.id)}
-                    onDragOver={(e)=>e.preventDefault()}
-                    onDrop={(e)=>onCategoryDrop(e,c.id)}
+                    onDragStart={(e) => onCategoryDragStart(e, c.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => onCategoryDrop(e, c.id)}
                   >
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-gray-400">drag_indicator</span>
-                      <input className="border rounded px-2 py-1" value={c.name} onChange={async (e)=>{
+                      <input className="border rounded px-2 py-1" value={c.name} onChange={async (e) => {
                         const v = e.target.value;
-                        setCategories(prev=>prev.map(x=>x.id===c.id?{...x,name:v}:x));
+                        setCategories(prev => prev.map(x => x.id === c.id ? { ...x, name: v } : x));
                         await apiClient.updateCategory(c.id, { name: v });
                       }} />
                     </div>
                     <div className="flex items-center gap-2">
-                      <select className="border rounded px-2 py-1 text-sm" value={c.parentId || ''} onChange={async (e)=>{
+                      <select className="border rounded px-2 py-1 text-sm" value={c.parentId || ''} onChange={async (e) => {
                         const pid = e.target.value || '';
                         const parentId = pid === '' ? null : Number(pid);
-                        setCategories(prev=>prev.map(x=>x.id===c.id?{...x,parentId}:x));
+                        setCategories(prev => prev.map(x => x.id === c.id ? { ...x, parentId } : x));
                         await apiClient.updateCategory(c.id, { parent_id: parentId });
                       }}>
                         <option value="">Üst kategori yok</option>
-                        {categories.filter(x=>x.id!==c.id).map(x=> (
+                        {categories.filter(x => x.id !== c.id).map(x => (
                           <option key={x.id} value={x.id}>{x.name}</option>
                         ))}
                       </select>
-                      <Button size="sm" variant="ghost" onClick={()=>handleAskDeleteCategory(c)}>Kaldır</Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleAskDeleteCategory(c)}>Kaldır</Button>
                     </div>
                   </div>
                 ))}
@@ -745,8 +732,8 @@ export const AdminCreateCourse: React.FC = () => {
               <p className="text-xs text-amber-600">Bu kategoride {deleteCategoryConfirm.count} eğitim bulundu. Mevcut eğitimler etkilenmez, sadece kategori listeden kaldırılır.</p>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={()=>setDeleteCategoryConfirm(null)}>İptal</Button>
-              <Button variant="primary" onClick={async ()=>{
+              <Button variant="outline" onClick={() => setDeleteCategoryConfirm(null)}>İptal</Button>
+              <Button variant="primary" onClick={async () => {
                 await apiClient.deleteCategory(Number(deleteCategoryConfirm.id));
                 setDeleteCategoryConfirm(null);
                 await loadCategories();
@@ -755,6 +742,6 @@ export const AdminCreateCourse: React.FC = () => {
           </div>
         </div>
       )}
-  </div>
-);
+    </div>
+  );
 };

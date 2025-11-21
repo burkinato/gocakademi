@@ -1,13 +1,13 @@
-import { UserRepository } from '../repositories/UserRepository.js';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import { ActivityLogService } from './ActivityLogService.js';
-import { hashPassword } from '../utils/auth.js';
+import { hashPassword } from '../../utils/auth.js';
 import {
     User,
     UserWithPermissions,
     PaginationParams,
     PaginatedResponse,
     FilterParams,
-} from '../types/index.js';
+} from '../../core/domain/entities/index.js';
 
 export class UserManagementService {
     private userRepo: UserRepository;

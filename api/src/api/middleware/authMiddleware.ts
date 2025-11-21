@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env.js';
+import { env } from '../../core/config/env.js';
 
 // Extend Express Request type
 declare global {

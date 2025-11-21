@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { UserManagementService } from '../services/UserManagementService.js';
-import { ApiResponse, PaginationParams, FilterParams } from '../types/index.js';
-import { isValidEmail, validatePasswordStrength } from '../utils/validation.js';
+import { UserManagementService } from '../../application/services/UserManagementService.js';
+import { ApiResponse, PaginationParams, FilterParams } from '../../core/domain/entities/index.js';
+import { isValidEmail, validatePasswordStrength } from '../../utils/validation.js';
 
 const userManagementService = new UserManagementService();
 

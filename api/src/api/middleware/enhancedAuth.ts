@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
-import { User } from '../types/index.js';
-import { AppError } from '../utils/AppError.js';
+import { User } from '../../core/domain/entities/index.js';
+import { AppError } from '../../core/errors/AppError.js';
 
 export enum UserRole {
   STUDENT = 'student',
@@ -11,7 +11,7 @@ export enum UserRole {
   ADMIN = 'admin'
 }
 
-import { logger } from '../utils/logger.js';
+import { logger } from '../../utils/logger.js';
 
 interface AuthenticatedRequest extends Request {
   user?: User;
@@ -82,13 +82,13 @@ export const enhancedAuth = async (
 ): Promise<void> => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (!token) {
       throw new AppError('No token provided', 401, 'AUTH_TOKEN_MISSING');
     }
 
     const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-    
+
     if (decoded.exp * 1000 < Date.now()) {
       throw new AppError('Token has expired', 401, 'AUTH_TOKEN_EXPIRED');
     }
@@ -107,7 +107,7 @@ export const enhancedAuth = async (
     }
 
     req.user = user;
-    
+
     logger.info(`User ${user.email} authenticated successfully`);
     next();
   } catch (error) {
@@ -169,7 +169,7 @@ export const requirePermission = (permissions: string[]) => {
     }
 
     const userPermissions = req.user.permissions || [];
-    const hasPermission = permissions.some(permission => 
+    const hasPermission = permissions.some(permission =>
       userPermissions.includes(permission)
     );
 
@@ -221,7 +221,7 @@ export const csrfProtection = (req: AuthenticatedRequest, res: Response, next: N
 export const validateInput = (schema: any) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { error } = schema.validate(req.body);
-    
+
     if (error) {
       const details = error.details.map((detail: any) => ({
         field: detail.path.join('.'),
@@ -247,7 +247,7 @@ export const securityHeaders = (req: Request, res: Response, next: NextFunction)
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
-  
+
   next();
 };
 
@@ -255,9 +255,9 @@ export const logActivity = (action: string, resource?: string) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     const userAgent = req.headers['user-agent'] || 'Unknown';
     const ip = req.ip || req.connection.remoteAddress || 'Unknown';
-    
+
     logger.info(`Activity: ${action} | User: ${req.user?.email || 'Anonymous'} | Resource: ${resource || req.path} | IP: ${ip} | User-Agent: ${userAgent}`);
-    
+
     next();
   };
 };

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { PermissionService } from '../services/PermissionService.js';
+import { PermissionService } from '../../application/services/PermissionService.js';
 
 const permissionService = new PermissionService();
 

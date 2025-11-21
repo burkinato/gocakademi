@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import { UnitRepository } from '../repositories/UnitRepository.js';
-import { TopicRepository } from '../repositories/TopicRepository.js';
-import { AssessmentRepository } from '../repositories/AssessmentRepository.js';
-import { QuestionRepository } from '../repositories/QuestionRepository.js';
-import { ProgressRepository } from '../repositories/ProgressRepository.js';
+import { UnitRepository } from '../../infrastructure/repositories/UnitRepository.js';
+import { TopicRepository } from '../../infrastructure/repositories/TopicRepository.js';
+import { AssessmentRepository } from '../../infrastructure/repositories/AssessmentRepository.js';
+import { QuestionRepository } from '../../infrastructure/repositories/QuestionRepository.js';
+import { ProgressRepository } from '../../infrastructure/repositories/ProgressRepository.js';
 
 export class EducationController {
     private unitRepo: UnitRepository;

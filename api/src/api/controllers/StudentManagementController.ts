@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { StudentService } from '../services/StudentService.js';
-import { ApiResponse, PaginationParams } from '../types/index.js';
-import { isValidEmail, isValidPhone, isValidGPA, isValidPercentage } from '../utils/validation.js';
+import { StudentService } from '../../application/services/StudentService.js';
+import { ApiResponse, PaginationParams } from '../../core/domain/entities/index.js';
+import { isValidEmail, isValidPhone, isValidGPA, isValidPercentage } from '../../utils/validation.js';
 
 const studentService = new StudentService();
 

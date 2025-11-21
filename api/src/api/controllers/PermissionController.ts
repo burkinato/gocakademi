@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { PermissionService } from '../services/PermissionService.js';
-import { ApiResponse } from '../types/index.js';
+import { PermissionService } from '../../application/services/PermissionService.js';
+import { ApiResponse } from '../../core/domain/entities/index.js';
 
 const permissionService = new PermissionService();
 

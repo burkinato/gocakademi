@@ -1,4 +1,4 @@
-import { query } from '../database/connection.js';
+import { query } from '../../infrastructure/database/connection.js';
 
 export class AssessmentService {
   async getByCourse(courseId: number) {

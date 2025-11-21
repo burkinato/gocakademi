@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env.js';
+import { env } from '../core/config/env.js';
 
 export const hashPassword = async (password: string): Promise<string> => {
   const saltRounds = 10;

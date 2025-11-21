@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { getAllCourses, getCourseById, createCourse, updateCourse, deleteCourse } from '../controllers/CourseController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
-import { LessonService } from '../services/LessonService.js';
-import { authenticateToken, requireAdmin } from '../middleware/auth.js';
+import { LessonService } from '../../application/services/LessonService.js';
+import { AssessmentService } from '../../application/services/AssessmentService.js';
 
 const router = Router();
 const lessonService = new LessonService();
+const assessmentService = new AssessmentService();
 
 // Public routes
 router.get('/', getAllCourses);
@@ -36,9 +37,6 @@ router.post('/:id/lessons', authMiddleware, async (req, res) => {
   }
 });
 
-export default router;
-import { AssessmentService } from '../services/AssessmentService.js';
-const assessmentService = new AssessmentService();
 // Assessments API
 router.get('/:id/assessments', async (req, res) => {
   try {
@@ -77,3 +75,5 @@ router.post('/assessments/:assessmentId/submit', async (req, res) => {
     res.status(400).json({ success: false, error: e.message });
   }
 });
+
+export default router;

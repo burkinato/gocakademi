@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { pool } from '../database/connection.js';
+import { pool } from '../../infrastructure/database/connection.js';
 
 interface RateLimitConfig {
     windowMs: number; // Time window in milliseconds

@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
-import { NotificationRepository } from '../repositories/NotificationRepository';
-import { UserRepository } from '../repositories/UserRepository';
+import { NotificationRepository } from '../../infrastructure/repositories/NotificationRepository';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository';
 import { ActivityLogService } from './ActivityLogService';
-import { env } from '../config/env';
+import { env } from '../../core/config/env';
 import { User } from '../types';
 
 export interface NotificationData {

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { ActivityLogService } from '../services/ActivityLogService.js';
-import { ApiResponse, PaginationParams } from '../types/index.js';
+import { ActivityLogService } from '../../application/services/ActivityLogService.js';
+import { ApiResponse, PaginationParams } from '../../core/domain/entities/index.js';
 
 const activityLogService = new ActivityLogService();
 

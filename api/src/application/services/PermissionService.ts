@@ -1,5 +1,5 @@
-import { PermissionRepository } from '../repositories/PermissionRepository.js';
-import { Permission, RolePermission, UserPermission } from '../types/index.js';
+import { PermissionRepository } from '../../infrastructure/repositories/PermissionRepository.js';
+import { Permission, RolePermission, UserPermission } from '../../core/domain/entities/index.js';
 
 export class PermissionService {
     private permissionRepo: PermissionRepository;

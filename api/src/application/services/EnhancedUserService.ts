@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { UserRepository } from '../repositories/UserRepository';
-import { PermissionRepository } from '../repositories/PermissionRepository';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository';
+import { PermissionRepository } from '../../infrastructure/repositories/PermissionRepository';
 import { ActivityLogService } from './ActivityLogService';
-import { env } from '../config/env';
+import { env } from '../../core/config/env';
 import { User, Permission } from '../types';
 
 export interface CreateUserData {

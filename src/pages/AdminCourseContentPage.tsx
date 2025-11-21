@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '../components/shared/Button';
 import { PageLoader } from '../components/shared/PageLoader';
+import { apiClient } from '../services/api';
 
 export const AdminCourseContentPage: React.FC = () => {
   const { id } = useParams();
@@ -15,13 +16,10 @@ export const AdminCourseContentPage: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const courseRes = await fetch(`/api/courses/${id}`);
-        const courseJson = await courseRes.json();
-        if (!courseRes.ok) throw new Error(courseJson.error || 'Kurs bulunamadı');
-        setCourse(courseJson.data);
-        const lessonRes = await fetch(`/api/courses/${id}/lessons`);
-        const lessonJson = await lessonRes.json();
-        setLessons(lessonJson.data || []);
+        const courseData = await apiClient.getCourse(Number(id));
+        setCourse(courseData.data);
+        const lessonData = await apiClient.client.get(`/courses/${id}/lessons`);
+        setLessons(lessonData.data?.data || []);
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -33,7 +31,7 @@ export const AdminCourseContentPage: React.FC = () => {
 
   const [unitTitle, setUnitTitle] = useState('');
   const [topicTitle, setTopicTitle] = useState('');
-  const [topicType, setTopicType] = useState<'video'|'pdf'|'text'>('video');
+  const [topicType, setTopicType] = useState<'video' | 'pdf' | 'text'>('video');
   const [videoUrl, setVideoUrl] = useState('');
   const [textContent, setTextContent] = useState('');
   const [duration, setDuration] = useState('');
@@ -50,16 +48,9 @@ export const AdminCourseContentPage: React.FC = () => {
         isRequired: true,
         duration: duration ? parseInt(duration) || null : null,
       }];
-      const res = await fetch(`/api/courses/${id}/lessons`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lessons: body }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'İçerik eklenemedi');
-      const lessonRes = await fetch(`/api/courses/${id}/lessons`);
-      const lessonJson = await lessonRes.json();
-      setLessons(lessonJson.data || []);
+      await apiClient.client.post(`/courses/${id}/lessons`, { lessons: body });
+      const lessonData = await apiClient.client.get(`/courses/${id}/lessons`);
+      setLessons(lessonData.data?.data || []);
       setTopicTitle(''); setVideoUrl(''); setTextContent(''); setPdfUrl(''); setDuration('');
     } catch (e: any) {
       setError(e.message);
@@ -83,24 +74,24 @@ export const AdminCourseContentPage: React.FC = () => {
         <div className="lg:col-span-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
           <h3 className="font-semibold mb-4">Ünite ve Konu Ekle</h3>
           <div className="space-y-3">
-            <input className="w-full border rounded-lg p-2" placeholder="Ünite Başlığı" value={unitTitle} onChange={(e)=>setUnitTitle(e.target.value)} />
-            <input className="w-full border rounded-lg p-2" placeholder="Konu Başlığı" value={topicTitle} onChange={(e)=>setTopicTitle(e.target.value)} />
-            <select className="w-full border rounded-lg p-2" value={topicType} onChange={(e)=>setTopicType(e.target.value as any)}>
+            <input className="w-full border rounded-lg p-2" placeholder="Ünite Başlığı" value={unitTitle} onChange={(e) => setUnitTitle(e.target.value)} />
+            <input className="w-full border rounded-lg p-2" placeholder="Konu Başlığı" value={topicTitle} onChange={(e) => setTopicTitle(e.target.value)} />
+            <select className="w-full border rounded-lg p-2" value={topicType} onChange={(e) => setTopicType(e.target.value as any)}>
               <option value="video">Video</option>
               <option value="pdf">PDF</option>
               <option value="text">Metin</option>
             </select>
             {topicType === 'video' && (
               <>
-                <input className="w-full border rounded-lg p-2" placeholder="Video URL" value={videoUrl} onChange={(e)=>setVideoUrl(e.target.value)} />
-                <input className="w-full border rounded-lg p-2" placeholder="Süre (dk)" value={duration} onChange={(e)=>setDuration(e.target.value)} />
+                <input className="w-full border rounded-lg p-2" placeholder="Video URL" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
+                <input className="w-full border rounded-lg p-2" placeholder="Süre (dk)" value={duration} onChange={(e) => setDuration(e.target.value)} />
               </>
             )}
             {topicType === 'pdf' && (
-              <input className="w-full border rounded-lg p-2" placeholder="PDF URL" value={pdfUrl} onChange={(e)=>setPdfUrl(e.target.value)} />
+              <input className="w-full border rounded-lg p-2" placeholder="PDF URL" value={pdfUrl} onChange={(e) => setPdfUrl(e.target.value)} />
             )}
             {topicType === 'text' && (
-              <textarea className="w-full border rounded-lg p-2 min-h-24" placeholder="Metin İçerik" value={textContent} onChange={(e)=>setTextContent(e.target.value)} />
+              <textarea className="w-full border rounded-lg p-2 min-h-24" placeholder="Metin İçerik" value={textContent} onChange={(e) => setTextContent(e.target.value)} />
             )}
             <Button variant="primary" onClick={addTopic}>Ekle</Button>
           </div>
@@ -110,7 +101,7 @@ export const AdminCourseContentPage: React.FC = () => {
           <h3 className="font-semibold mb-4">Üniteler ve Konular</h3>
           <div className="space-y-4">
             {lessons.length === 0 && <div className="p-6 text-gray-500">Henüz içerik eklenmemiş.</div>}
-            {lessons.map((l)=> (
+            {lessons.map((l) => (
               <div key={l.id} className="border rounded-lg p-4 flex items-center justify-between">
                 <div>
                   <div className="text-sm text-gray-500">{l.unit_title || 'Bölüm'}</div>

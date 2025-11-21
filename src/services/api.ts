@@ -6,8 +6,12 @@ class EnhancedApiClient {
   public client: AxiosInstance;
 
   constructor() {
+    const baseURL = import.meta.env.VITE_API_URL
+      ? `${import.meta.env.VITE_API_URL}/api`
+      : 'http://localhost:3001/api';
+
     this.client = axios.create({
-      baseURL: import.meta.env.VITE_API_URL || '/api',
+      baseURL,
       timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
@@ -95,7 +99,7 @@ class EnhancedApiClient {
   }
 
   async adminLogin(credentials: any) {
-    const response = await this.client.post('/auth/admin/login', credentials);
+    const response = await this.client.post('/auth/admin-login', credentials);
     return response.data;
   }
 

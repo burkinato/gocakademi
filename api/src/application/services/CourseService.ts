@@ -1,5 +1,5 @@
-import { CourseRepository } from '../repositories/CourseRepository.js';
-import { Course } from '../types/index.js';
+import { CourseRepository } from '../../infrastructure/repositories/CourseRepository.js';
+import { Course } from '../../core/domain/entities/index.js';
 
 export class CourseService {
   private courseRepository: CourseRepository;

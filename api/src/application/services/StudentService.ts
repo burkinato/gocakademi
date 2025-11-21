@@ -1,5 +1,5 @@
-import { StudentRepository } from '../repositories/StudentRepository.js';
-import { UserRepository } from '../repositories/UserRepository.js';
+import { StudentRepository } from '../../infrastructure/repositories/StudentRepository.js';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import {
     StudentProfile,
     StudentDocument,
@@ -7,7 +7,7 @@ import {
     StudentWithProfile,
     PaginationParams,
     PaginatedResponse,
-} from '../types/index.js';
+} from '../../core/domain/entities/index.js';
 
 export class StudentService {
     private studentRepo: StudentRepository;

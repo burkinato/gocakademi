@@ -1,10 +1,7 @@
 import { Request, Response } from 'express';
-import { AuthService } from '../services/AuthService.js';
-import { ApiResponse } from '../types/index.js';
-import { tokenValidationService, validateRefreshToken } from '../services/TokenValidationService.js';
-import jwt from 'jsonwebtoken';
-
-const authService = new AuthService();
+import { pool } from '../../infrastructure/database/connection.js';
+import { hashPassword, comparePassword, generateToken, generateRefreshToken } from '../../utils/auth.js';
+import { ApiResponse } from '../../core/domain/entities/index.js';
 
 export const register = async (req: Request, res: Response<ApiResponse<any>>) => {
   try {
@@ -17,25 +14,58 @@ export const register = async (req: Request, res: Response<ApiResponse<any>>) =>
       });
     }
 
-    const result = await authService.register({
-      email,
-      password,
-      firstName,
-      lastName,
-      isActive: true,
-      emailVerified: false,
-      phoneVerified: false,
-      twoFactorEnabled: false,
-      role: 'student',
+    // Check if user exists
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'User already exists'
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user
+    const result = await pool.query(
+      `INSERT INTO users (email, password, first_name, last_name, role, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, email, first_name, last_name, role`,
+      [email, hashedPassword, firstName, lastName, 'student', true]
+    );
+
+    const user = result.rows[0];
+
+    // Generate tokens
+    const accessToken = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email
     });
 
     res.status(201).json({
       success: true,
-      data: result,
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          role: user.role
+        }
+      },
       message: 'User registered successfully',
     });
   } catch (error) {
-    res.status(400).json({
+    console.error('Register error:', error);
+    res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Registration failed',
     });
@@ -53,15 +83,71 @@ export const login = async (req: Request, res: Response<ApiResponse<any>>) => {
       });
     }
 
-    const result = await authService.login(email, password);
+    // Find user
+    const result = await pool.query(
+      'SELECT id, email, password, first_name, last_name, role, is_active FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Check if active
+    if (!user.is_active) {
+      return res.status(401).json({
+        success: false,
+        error: 'Account is deactivated'
+      });
+    }
+
+    // Verify password
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
+      });
+    }
+
+    // Update last login
+    await pool.query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+
+    // Generate tokens
+    const accessToken = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email
+    });
 
     res.status(200).json({
       success: true,
-      data: result,
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          role: user.role
+        }
+      },
       message: 'Login successful',
     });
   } catch (error) {
-    res.status(401).json({
+    console.error('Login error:', error);
+    res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Login failed',
     });
@@ -79,15 +165,60 @@ export const adminLogin = async (req: Request, res: Response<ApiResponse<any>>) 
       });
     }
 
-    const result = await authService.adminLogin(email, password);
+    // Find user
+    const result = await pool.query(
+      'SELECT id, email, password, first_name, last_name, role, is_active FROM users WHERE email = $1 AND role = $2',
+      [email, 'admin']
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid admin credentials'
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Verify password
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid admin credentials'
+      });
+    }
+
+    // Generate tokens
+    const accessToken = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role
+    });
+
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email
+    });
 
     res.status(200).json({
       success: true,
-      data: result,
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          role: user.role
+        }
+      },
       message: 'Admin login successful',
     });
   } catch (error) {
-    res.status(401).json({
+    console.error('Admin login error:', error);
+    res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Admin login failed',
     });
@@ -105,45 +236,34 @@ export const refreshToken = async (req: Request, res: Response<ApiResponse<any>>
       });
     }
 
-    const result = await authService.refreshToken(refreshToken);
+    // Verify refresh token
+    const jwt = await import('jsonwebtoken');
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'secret') as any;
+
+    // Generate new access token
+    const accessToken = generateToken({
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role
+    });
 
     res.status(200).json({
       success: true,
-      data: result,
+      data: {
+        accessToken
+      },
       message: 'Token refreshed successfully',
     });
   } catch (error) {
     res.status(401).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Token refresh failed',
+      error: 'Invalid refresh token',
     });
   }
 };
 
 export const logout = async (req: Request, res: Response<ApiResponse<any>>) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: 'Access token required'
-      });
-    }
-
-    // Decode token to get user ID
-    const decoded = jwt.decode(token) as any;
-    if (!decoded || !decoded.userId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid token'
-      });
-    }
-
-    // Call enhanced logout with token blacklisting
-    await authService.logout(token, decoded.userId);
-
     res.status(200).json({
       success: true,
       message: 'Logout successful',
@@ -151,92 +271,12 @@ export const logout = async (req: Request, res: Response<ApiResponse<any>>) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Logout failed',
+      error: 'Logout failed',
     });
   }
 };
 
-export const forgotPassword = async (req: Request, res: Response<ApiResponse<any>>) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email is required'
-      });
-    }
-
-    // TODO: Implement password reset token generation and email sending
-    res.status(200).json({
-      success: true,
-      message: 'Password reset email sent successfully',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Password reset failed',
-    });
-  }
-};
-
-export const resetPassword = async (req: Request, res: Response<ApiResponse<any>>) => {
-  try {
-    const { token, newPassword } = req.body;
-
-    if (!token || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Token and new password are required'
-      });
-    }
-
-    // TODO: Implement password reset with token validation
-    res.status(200).json({
-      success: true,
-      message: 'Password reset successfully',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Password reset failed',
-    });
-  }
-};
-
-export const changePassword = async (req: Request, res: Response<ApiResponse<any>>) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    const userId = (req as any).user?.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Unauthorized'
-      });
-    }
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'Current password and new password are required'
-      });
-    }
-
-    // TODO: Implement password change logic
-    res.status(200).json({
-      success: true,
-      message: 'Password changed successfully',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Password change failed',
-    });
-  }
-};
-
-export const getProfile = async (req: Request, res: Response<ApiResponse<any>>) => {
+export const me = async (req: Request, res: Response<ApiResponse<any>>) => {
   try {
     const userId = (req as any).user?.userId;
 
@@ -247,41 +287,38 @@ export const getProfile = async (req: Request, res: Response<ApiResponse<any>>) 
       });
     }
 
-    // TODO: Fetch user profile from database
+    // Get user from DB
+    const result = await pool.query(
+      'SELECT id, email, first_name, last_name, role, is_active FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const user = result.rows[0];
+
     res.status(200).json({
       success: true,
-      data: { userId },
+      data: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role,
+        isActive: user.is_active,
+      },
       message: 'Profile fetched successfully',
     });
   } catch (error) {
+    console.error('Me error:', error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch profile',
-    });
-  }
-};
-
-export const updateProfile = async (req: Request, res: Response<ApiResponse<any>>) => {
-  try {
-    const userId = (req as any).user?.userId;
-    const updates = req.body;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Unauthorized'
-      });
-    }
-
-    // TODO: Update user profile in database
-    res.status(200).json({
-      success: true,
-      message: 'Profile updated successfully',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update profile',
+      error: 'Failed to fetch profile',
     });
   }
 };

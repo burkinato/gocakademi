@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ActivityLogService } from '../services/ActivityLogService.js';
+import { ActivityLogService } from '../../application/services/ActivityLogService.js';
 
 const activityLogService = new ActivityLogService();
 

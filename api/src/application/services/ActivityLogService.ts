@@ -1,5 +1,5 @@
-import { ActivityLogRepository } from '../repositories/ActivityLogRepository.js';
-import { ActivityLog, PaginationParams, PaginatedResponse, FilterParams } from '../types/index.js';
+import { ActivityLogRepository } from '../../infrastructure/repositories/ActivityLogRepository.js';
+import { ActivityLog, PaginationParams, PaginatedResponse, FilterParams } from '../../core/domain/entities/index.js';
 
 export class ActivityLogService {
     private activityLogRepo: ActivityLogRepository;

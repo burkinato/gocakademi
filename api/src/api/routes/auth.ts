@@ -1,19 +1,17 @@
 import { Router } from 'express';
-import { register, login, adminLogin, logout, refreshToken } from '../controllers/AuthController.js';
-import { authSecurity, getCSRFToken, authenticate } from '../middleware/unifiedSecurityMiddleware.js';
+import { register, login, adminLogin, refreshToken, logout, me } from '../controllers/AuthController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// CSRF token endpoint (no auth required)
-router.get('/csrf-token', getCSRFToken);
+// Public authentication endpoints (no auth required)
+router.post('/register', register);
+router.post('/login', login);
+router.post('/admin-login', adminLogin);
+router.post('/refresh', refreshToken);
 
-// Authentication endpoints with security middleware
-router.post('/register', authSecurity, register);
-router.post('/login', authSecurity, login);
-router.post('/admin/login', authSecurity, adminLogin);
-router.post('/refresh', authSecurity, refreshToken);
-
-// Protected logout endpoint
-router.post('/logout', authenticate, logout);
+// Protected endpoints (auth required)
+router.post('/logout', authMiddleware, logout);
+router.get('/me', authMiddleware, me);
 
 export default router;

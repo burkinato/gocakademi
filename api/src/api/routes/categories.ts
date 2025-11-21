@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { CategoryService } from '../services/CategoryService.js';
+import { CategoryService } from '../../application/services/CategoryService.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const publicRouter = Router();

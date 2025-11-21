@@ -1,4 +1,4 @@
-import { CategoryRepository } from '../repositories/CategoryRepository.js';
+import { CategoryRepository } from '../../infrastructure/repositories/CategoryRepository.js';
 
 export class CategoryService {
   private repo: CategoryRepository;

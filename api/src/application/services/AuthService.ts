@@ -1,10 +1,10 @@
-import { UserRepository } from '../repositories/UserRepository.js';
-import { CourseRepository } from '../repositories/CourseRepository.js';
-import { hashPassword, comparePassword } from '../utils/auth.js';
-import { User } from '../types/index.js';
-import { env } from '../config/env.js';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
+import { CourseRepository } from '../../infrastructure/repositories/CourseRepository.js';
+import { hashPassword, comparePassword } from '../../utils/auth.js';
+import { User } from '../../core/domain/entities/index.js';
+import { env } from '../../core/config/env.js';
 import { tokenValidationService, generateAccessToken, generateRefreshToken, createSession, revokeSession } from './TokenValidationService.js';
-import { PermissionRepository } from '../repositories/PermissionRepository.js';
+import { PermissionRepository } from '../../infrastructure/repositories/PermissionRepository.js';
 
 export class AuthService {
   private userRepository: UserRepository;

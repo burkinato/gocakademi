@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { CourseService } from '../services/CourseService.js';
-import { LessonService } from '../services/LessonService.js';
-import { ApiResponse } from '../types/index.js';
+import { CourseService } from '../../application/services/CourseService.js';
+import { LessonService } from '../../application/services/LessonService.js';
+import { ApiResponse } from '../../core/domain/entities/index.js';
 
 const courseService = new CourseService();
 const lessonService = new LessonService();
