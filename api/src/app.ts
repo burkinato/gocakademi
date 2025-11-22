@@ -16,12 +16,9 @@ import studentManagementRoutes from './api/routes/studentManagementRoutes.js';
 import permissionRoutes from './api/routes/permissionRoutes.js';
 import activityLogRoutes from './api/routes/activityLogRoutes.js';
 import uploadRoutes from './api/routes/upload.js';
+import quizRoutes from './api/routes/quiz.routes.js';
 
 const app = express();
-
-// ============================================
-// 1. Security Middleware
-// ============================================
 app.use(cors({
   origin: env.CLIENT_URL,
   credentials: true,
@@ -86,6 +83,9 @@ app.use('/api/admin/users', authMiddleware, userManagementRoutes);
 app.use('/api/admin/students', authMiddleware, studentManagementRoutes);
 app.use('/api/admin/permissions', authMiddleware, permissionRoutes);
 app.use('/api/admin/activity-logs', authMiddleware, activityLogRoutes);
+
+// Quiz routes (protected)
+app.use('/api/quiz', quizRoutes);
 
 // Docs
 app.use('/api/docs', docsRoutes);
