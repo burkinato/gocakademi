@@ -1,6 +1,11 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/authStore';
 import { apiService } from './apiService';
+
+// Extend AxiosRequestConfig to include _retry property
+interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean;
+}
 
 class EnhancedApiClient {
   public client: AxiosInstance;
@@ -74,7 +79,7 @@ class EnhancedApiClient {
         if (error.response?.status === 403 && ((error.response.data as any)?.error || '').includes('CSRF')) {
           console.warn('CSRF token validation failed, retrying...');
           // Retry the request once
-          const originalRequest = error.config;
+          const originalRequest = error.config as CustomAxiosRequestConfig;
           if (originalRequest && !originalRequest._retry) {
             originalRequest._retry = true;
             return this.client(originalRequest);

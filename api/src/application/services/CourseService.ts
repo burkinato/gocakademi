@@ -8,9 +8,9 @@ export class CourseService {
     this.courseRepository = new CourseRepository();
   }
 
-  async getAllCourses(limit: number = 10, offset: number = 0, category?: string, level?: string) {
+  async getAllCourses(limit: number = 10, offset: number = 0, category?: string, level?: string, includeAll: boolean = false) {
     try {
-      const courses = await this.courseRepository.findAll(limit, offset, category, level);
+      const courses = await this.courseRepository.findAll(limit, offset, category, level, includeAll);
       return courses;
     } catch (error) {
       throw new Error('Failed to fetch courses');

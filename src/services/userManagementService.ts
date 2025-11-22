@@ -71,5 +71,28 @@ export const userManagementService = {
     disable2FA: async (id: number): Promise<User> => {
         const response = await apiClient.client.post<ApiResponse<User>>(`/admin/users/${id}/2fa/disable`);
         return response.data.data!;
-    }
+    },
+
+    /**
+     * Upload avatar image
+     */
+    uploadAvatar: async (file: File): Promise<{ url: string }> => {
+        const formData = new FormData();
+        formData.append('avatar', file);
+
+        const response = await apiClient.client.post('/upload/avatar', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        return response.data.data;
+    },
+
+    /**
+     * Delete avatar image
+     */
+    deleteAvatar: async (filename: string): Promise<void> => {
+        await apiClient.client.delete(`/upload/avatar/${filename}`);
+    },
 };

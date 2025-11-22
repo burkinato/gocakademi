@@ -1,19 +1,29 @@
-interface Request {
-    user?: {
-        userId: number;
-        email: string;
-        role: 'student' | 'instructor' | 'admin';
-        permissions: string[];
-        sessionId?: string;
-    };
-    csrfToken?: string;
-    securityContext?: {
-        ipAddress: string;
-        userAgent: string;
-        requestId: string;
-        timestamp: number;
-    };
-}
+import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { env } from '../../core/config/env.js';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
+import { PermissionRepository } from '../../infrastructure/repositories/PermissionRepository.js';
+import { ActivityLogService } from '../../application/services/ActivityLogService.js';
+
+declare global {
+    namespace Express {
+        interface Request {
+            user?: {
+                userId: number;
+                email: string;
+                role: 'student' | 'instructor' | 'admin';
+                permissions?: string[];
+                sessionId?: string;
+            };
+            csrfToken?: string;
+            securityContext?: {
+                ipAddress: string;
+                userAgent: string;
+                requestId: string;
+                timestamp: number;
+            };
+        }
     }
 }
 

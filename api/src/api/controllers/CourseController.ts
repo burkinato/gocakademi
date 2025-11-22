@@ -6,15 +6,47 @@ import { ApiResponse } from '../../core/domain/entities/index.js';
 const courseService = new CourseService();
 const lessonService = new LessonService();
 
+const buildLessonsFromCurriculum = (curriculum: any[]) => {
+  const lessons: any[] = [];
+  let order = 0;
+  for (const unit of curriculum) {
+    const unitTitle = unit.title;
+    for (const item of (unit.items || [])) {
+      const durationValue = item.duration ? parseInt(item.duration) : null;
+      const metadata: Record<string, any> = {
+        attachments: item.attachments || [],
+        quiz: item.quiz || null,
+        richTextEnabled: Boolean(item.richTextContent),
+        resources: item.resources || [],
+        videoAsset: item.videoAsset || null,
+      };
+
+      lessons.push({
+        title: item.title,
+        unitTitle,
+        content: item.richTextContent || item.textContent || undefined,
+        videoUrl: item.type === 'video' ? item.contentUrl : undefined,
+        orderIndex: order++,
+        duration: durationValue ? (Number.isNaN(durationValue) ? null : durationValue) : null,
+        contentType: item.type,
+        isRequired: item.isRequired ?? true,
+        metadata,
+      });
+    }
+  }
+  return lessons;
+};
+
 export const getAllCourses = async (req: Request, res: Response<ApiResponse<any>>) => {
   try {
-    const { limit = 10, offset = 0, category, level } = req.query;
+    const { limit = 10, offset = 0, category, level, includeAll } = req.query;
     
     const courses = await courseService.getAllCourses(
       parseInt(limit as string),
       parseInt(offset as string),
       category as string,
-      level as string
+      level as string,
+      includeAll === 'true'
     );
 
     res.status(200).json({
@@ -56,23 +88,7 @@ export const createCourse = async (req: Request, res: Response<ApiResponse<any>>
     const course = await courseService.createCourse(courseData);
 
     if (Array.isArray(curriculum) && curriculum.length > 0) {
-      const lessons = [] as any[];
-      let order = 0;
-      for (const unit of curriculum) {
-        const unitTitle = unit.title;
-        for (const item of (unit.items || [])) {
-          lessons.push({
-            title: item.title,
-            unitTitle,
-            content: item.type === 'text' ? item.textContent : undefined,
-            videoUrl: item.type === 'video' ? item.contentUrl : undefined,
-            orderIndex: order++,
-            duration: item.duration ? parseInt(item.duration) || null : null,
-            contentType: item.type,
-            isRequired: item.isRequired ?? true,
-          });
-        }
-      }
+      const lessons = buildLessonsFromCurriculum(curriculum);
       await lessonService.createBulk(course.id, lessons);
     }
 
@@ -92,9 +108,13 @@ export const createCourse = async (req: Request, res: Response<ApiResponse<any>>
 export const updateCourse = async (req: Request, res: Response<ApiResponse<any>>) => {
   try {
     const { id } = req.params;
-    const courseData = req.body;
+    const { curriculum, ...courseData } = req.body as any;
     
     const course = await courseService.updateCourse(parseInt(id), courseData);
+    if (Array.isArray(curriculum)) {
+      const lessons = buildLessonsFromCurriculum(curriculum);
+      await lessonService.replaceCourseLessons(parseInt(id), lessons);
+    }
 
     res.status(200).json({
       success: true,

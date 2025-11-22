@@ -1,27 +1,74 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Button } from '../components/shared/Button';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { PageLoader } from '../components/shared/PageLoader';
+import { AdminCreateCourse } from '../components/admin/AdminCreateCourse';
 import { apiClient } from '../services/api';
+import { CurriculumUnit, CurriculumItem, ContentType } from '../types';
+
+const transformLessonsToCurriculum = (lessons: any[]): CurriculumUnit[] => {
+  const units = new Map<string, CurriculumUnit>();
+  lessons
+    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    .forEach((lesson) => {
+      const unitKey = lesson.unit_title || 'Bölüm';
+      if (!units.has(unitKey)) {
+        units.set(unitKey, {
+          id: `unit-${unitKey}-${units.size + 1}`,
+          title: unitKey,
+          items: [],
+        });
+      }
+      const item: CurriculumItem = {
+        id: `lesson-${lesson.id}`,
+        title: lesson.title,
+        type: (lesson.content_type || 'video') as ContentType,
+        duration: lesson.duration ? String(lesson.duration) : '',
+        isRequired: lesson.is_required ?? true,
+        contentUrl: lesson.video_url || (lesson.content_type === 'pdf' ? lesson.content : undefined),
+        textContent: lesson.content_type === 'pdf' ? lesson.content : undefined,
+        richTextContent: lesson.content_type === 'text' ? lesson.content : undefined,
+        videoAsset: lesson.content_type === 'video' && lesson.video_url
+          ? {
+              source: 'url',
+              name: lesson.video_url,
+              size: 0,
+              mimeType: 'text/url',
+            }
+          : null,
+        attachments: Array.isArray(lesson.metadata?.attachments) ? lesson.metadata.attachments : [],
+        quiz: lesson.metadata?.quiz || undefined,
+        metadata: lesson.metadata || {},
+      };
+      units.get(unitKey)?.items.push(item);
+    });
+
+  return Array.from(units.values()).map(unit => ({
+    ...unit,
+    items: unit.items,
+  }));
+};
 
 export const AdminCourseContentPage: React.FC = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const [course, setCourse] = useState<any>(null);
-  const [lessons, setLessons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [courseData, setCourseData] = useState<any>(null);
+  const [curriculum, setCurriculum] = useState<CurriculumUnit[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!id) return;
       try {
         setLoading(true);
-        const courseData = await apiClient.getCourse(Number(id));
-        setCourse(courseData.data);
-        const lessonData = await apiClient.client.get(`/courses/${id}/lessons`);
-        setLessons(lessonData.data?.data || []);
+        const [courseRes, lessonsRes] = await Promise.all([
+          apiClient.getCourse(Number(id)),
+          apiClient.client.get(`/courses/${id}/lessons`),
+        ]);
+        setCourseData(courseRes.data);
+        setCurriculum(transformLessonsToCurriculum(lessonsRes.data?.data || []));
+        setError(null);
       } catch (e: any) {
-        setError(e.message);
+        setError(e.message || 'Eğitim yüklenemedi');
       } finally {
         setLoading(false);
       }
@@ -29,94 +76,29 @@ export const AdminCourseContentPage: React.FC = () => {
     fetchData();
   }, [id]);
 
-  const [unitTitle, setUnitTitle] = useState('');
-  const [topicTitle, setTopicTitle] = useState('');
-  const [topicType, setTopicType] = useState<'video' | 'pdf' | 'text'>('video');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [textContent, setTextContent] = useState('');
-  const [duration, setDuration] = useState('');
-  const [pdfUrl, setPdfUrl] = useState('');
-
-  const addTopic = async () => {
-    try {
-      const body = [{
-        title: topicTitle,
-        unitTitle: unitTitle || 'Bölüm',
-        contentType: topicType,
-        videoUrl: topicType === 'video' ? videoUrl : undefined,
-        content: topicType === 'text' ? textContent : undefined,
-        isRequired: true,
-        duration: duration ? parseInt(duration) || null : null,
-      }];
-      await apiClient.client.post(`/courses/${id}/lessons`, { lessons: body });
-      const lessonData = await apiClient.client.get(`/courses/${id}/lessons`);
-      setLessons(lessonData.data?.data || []);
-      setTopicTitle(''); setVideoUrl(''); setTextContent(''); setPdfUrl(''); setDuration('');
-    } catch (e: any) {
-      setError(e.message);
-    }
-  };
+  const initialCourse = useMemo(() => {
+    if (!courseData) return undefined;
+    return {
+      title: courseData.title,
+      description: courseData.description,
+      category: courseData.category,
+      level: courseData.level,
+      price: courseData.price,
+      imageUrl: courseData.image_url,
+      isPublished: courseData.is_published,
+    };
+  }, [courseData]);
 
   if (loading) return <PageLoader />;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (!courseData) return null;
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{course?.title} • İçerik Yönetimi</h1>
-          <p className="text-sm text-gray-500">Üniteler, konular (video/PDF/metin) ve değerlendirmeler.</p>
-        </div>
-        <Button variant="outline" onClick={() => navigate('/admin/courses')}>Geri</Button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <h3 className="font-semibold mb-4">Ünite ve Konu Ekle</h3>
-          <div className="space-y-3">
-            <input className="w-full border rounded-lg p-2" placeholder="Ünite Başlığı" value={unitTitle} onChange={(e) => setUnitTitle(e.target.value)} />
-            <input className="w-full border rounded-lg p-2" placeholder="Konu Başlığı" value={topicTitle} onChange={(e) => setTopicTitle(e.target.value)} />
-            <select className="w-full border rounded-lg p-2" value={topicType} onChange={(e) => setTopicType(e.target.value as any)}>
-              <option value="video">Video</option>
-              <option value="pdf">PDF</option>
-              <option value="text">Metin</option>
-            </select>
-            {topicType === 'video' && (
-              <>
-                <input className="w-full border rounded-lg p-2" placeholder="Video URL" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} />
-                <input className="w-full border rounded-lg p-2" placeholder="Süre (dk)" value={duration} onChange={(e) => setDuration(e.target.value)} />
-              </>
-            )}
-            {topicType === 'pdf' && (
-              <input className="w-full border rounded-lg p-2" placeholder="PDF URL" value={pdfUrl} onChange={(e) => setPdfUrl(e.target.value)} />
-            )}
-            {topicType === 'text' && (
-              <textarea className="w-full border rounded-lg p-2 min-h-24" placeholder="Metin İçerik" value={textContent} onChange={(e) => setTextContent(e.target.value)} />
-            )}
-            <Button variant="primary" onClick={addTopic}>Ekle</Button>
-          </div>
-        </div>
-
-        <div className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
-          <h3 className="font-semibold mb-4">Üniteler ve Konular</h3>
-          <div className="space-y-4">
-            {lessons.length === 0 && <div className="p-6 text-gray-500">Henüz içerik eklenmemiş.</div>}
-            {lessons.map((l) => (
-              <div key={l.id} className="border rounded-lg p-4 flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-gray-500">{l.unit_title || 'Bölüm'}</div>
-                  <div className="font-medium">{l.title}</div>
-                  <div className="text-xs text-gray-500">{l.content_type || '—'} {l.duration ? `• ${l.duration} dk` : ''}</div>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm">Düzenle</Button>
-                  <Button variant="ghost" size="sm">Sil</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+    <AdminCreateCourse
+      mode="edit"
+      courseId={Number(id)}
+      initialCourse={initialCourse}
+      initialCurriculum={curriculum}
+    />
   );
 };

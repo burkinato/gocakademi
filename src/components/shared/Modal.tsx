@@ -8,6 +8,7 @@ interface ModalProps {
     children: React.ReactNode;
     size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
     footer?: React.ReactNode;
+    bodyClassName?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -16,7 +17,8 @@ export const Modal: React.FC<ModalProps> = ({
     title,
     children,
     size = 'md',
-    footer
+    footer,
+    bodyClassName = '',
 }) => {
     const modalRef = useRef<HTMLDivElement>(null);
 
@@ -73,7 +75,7 @@ export const Modal: React.FC<ModalProps> = ({
                 </div>
 
                 {/* Body */}
-                <div className="p-6 overflow-y-auto">
+                <div className={`p-6 overflow-y-auto ${bodyClassName}`}>
                     {children}
                 </div>
 

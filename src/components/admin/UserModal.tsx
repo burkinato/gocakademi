@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../shared/Modal';
 import { FormField } from '../shared/FormField';
 import { Button } from '../shared/Button';
+import { AvatarUpload } from './AvatarUpload';
 import { User } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { userManagementService } from '../../services/userManagementService';
@@ -39,7 +40,8 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
+    const [initialAvatarUrl, setInitialAvatarUrl] = useState<string | null>(null);
     const [emergencyContacts, setEmergencyContacts] = useState<Array<{ name: string; phone: string; relationship?: string }>>([]);
     const cryptoRandom = () => Math.random().toString(36).slice(2, 18);
     const [phoneNumbers, setPhoneNumbers] = useState<string[]>([]);
@@ -106,7 +108,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             setDistrict('');
         }
         setErrors({});
-        setAvatarPreview(null);
+        const avatarFromUser = user?.profileImageUrl || null;
+        setCurrentAvatarUrl(avatarFromUser);
+        setInitialAvatarUrl(avatarFromUser);
         setEmergencyContacts([]);
         setPhoneNumbers([]);
         setSecondaryEmail('');
@@ -147,7 +151,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
 
             // Basic fields
             if (password) dataToSave.password = password;
-            if (avatarPreview) dataToSave.profileImageUrl = avatarPreview;
+            if (currentAvatarUrl !== initialAvatarUrl) {
+                dataToSave.profileImageUrl = currentAvatarUrl;
+            }
             if (formData.dateOfBirth) dataToSave.dateOfBirth = formData.dateOfBirth;
 
             // Job fields
@@ -287,37 +293,26 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                 <div className={`space-y-6 transition-all duration-500 ease-out ${activeTab === 'profile' ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 absolute pointer-events-none'
                     }`}>
                     {/* Avatar Upload Section */}
-                    <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden flex items-center justify-center ring-2 ring-primary/20">
-                            {avatarPreview ? (
-                                <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
-                            ) : (
-                                <span className="material-symbols-outlined text-4xl text-primary/60">person</span>
-                            )}
-                        </div>
-                        <div className="flex-1">
-                            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed border-primary/30 hover:border-primary/60 cursor-pointer text-sm transition-all hover:bg-primary/5">
-                                <span className="material-symbols-outlined text-primary">upload</span>
-                                <span className="font-medium">{avatarPreview ? 'Avatarı Değiştir' : 'Avatar Yükle'}</span>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file && file.type.startsWith('image') && file.size <= 5 * 1024 * 1024) {
-                                            setAvatarPreview(URL.createObjectURL(file));
-                                        }
-                                    }}
-                                />
-                            </label>
-                            {avatarPreview && (
-                                <button type="button" className="ml-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" onClick={() => setAvatarPreview(null)}>
-                                    Kaldır
-                                </button>
-                            )}
-                            <p className="text-xs text-gray-500 mt-2">Max 5MB, JPG veya PNG</p>
-                        </div>
+                    <div className="flex justify-center py-4">
+                        <AvatarUpload
+                            currentAvatar={currentAvatarUrl}
+                            onUpload={async (file) => {
+                                const result = await userManagementService.uploadAvatar(file);
+                                setCurrentAvatarUrl(result.url);
+                                return result.url;
+                            }}
+                            onRemove={async () => {
+                                if (currentAvatarUrl) {
+                                    const filename = currentAvatarUrl.split('/').pop();
+                                    if (filename) {
+                                        await userManagementService.deleteAvatar(filename);
+                                    }
+                                }
+                                setCurrentAvatarUrl(null);
+                            }}
+                            size="lg"
+                            disabled={loading}
+                        />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

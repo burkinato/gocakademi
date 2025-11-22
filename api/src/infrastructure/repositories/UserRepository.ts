@@ -1,6 +1,17 @@
-import { pool } from '../database/connection.js';
+import { pool, ensureUserExtendedColumns } from '../database/connection.js';
 import { User, UserWithPermissions, PaginationParams, PaginatedResponse, FilterParams } from '../types/index.js';
 import { PermissionRepository } from './PermissionRepository.js';
+
+const parseJsonArray = (value: any) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 export class UserRepository {
   private permissionRepo: PermissionRepository;
@@ -24,6 +35,7 @@ export class UserRepository {
   }
 
   async create(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User> {
+    await ensureUserExtendedColumns();
     const result = await pool.query(
       `INSERT INTO users (
         username, email, password, password_hash, first_name, last_name, role, is_active
@@ -44,6 +56,7 @@ export class UserRepository {
   }
 
   async createBasic(params: { email: string; password: string; firstName: string; lastName: string; role: 'student' | 'instructor' | 'admin'; isActive?: boolean }): Promise<User> {
+    await ensureUserExtendedColumns();
     const result = await pool.query(
       `INSERT INTO users (email, password, first_name, last_name, role, is_active)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -61,6 +74,7 @@ export class UserRepository {
   }
 
   async update(id: number, userData: Partial<User>): Promise<User | null> {
+    await ensureUserExtendedColumns();
     const fields: string[] = [];
     const values: any[] = [];
     let paramCount = 1;
@@ -336,6 +350,21 @@ export class UserRepository {
       dateOfBirth: row.date_of_birth,
       profileImageUrl: row.profile_image_url,
       bio: row.bio,
+      jobTitle: row.job_title,
+      company: row.company,
+      industry: row.industry,
+      street: row.street,
+      neighborhood: row.neighborhood,
+      district: row.district,
+      secondaryEmail: row.secondary_email,
+      website: row.website,
+      linkedin: row.linkedin,
+      newsletterEnabled: row.newsletter_enabled,
+      smsNotificationsEnabled: row.sms_notifications_enabled,
+      marketingOptIn: row.marketing_opt_in,
+      notes: row.notes,
+      additionalPhones: parseJsonArray(row.additional_phones) as string[],
+      emergencyContacts: parseJsonArray(row.emergency_contacts) as any,
       lastLoginAt: row.last_login_at,
       emailVerified: row.email_verified,
       emailVerifiedAt: row.email_verified_at,

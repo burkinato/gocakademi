@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { NotificationBell } from '../components/shared/NotificationBell';
 import { useNotificationStore } from '../stores/notificationStore';
 import { Settings, LogOut, Bell, User, BarChart3, Users, GraduationCap, BookOpen, History, Shield, Target } from 'lucide-react';
+import { getAssetUrl } from '../utils/media';
 
 export const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
@@ -33,6 +34,8 @@ export const AdminLayout: React.FC = () => {
     ];
 
     const isActive = (path: string) => location.pathname === path;
+
+    const avatarUrl = getAssetUrl(user?.profileImageUrl);
 
     return (
         <div className="relative flex min-h-screen w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
@@ -75,8 +78,12 @@ export const AdminLayout: React.FC = () => {
                 <div className="border-t border-gray-200 dark:border-gray-700 p-4">
                     {user && (
                         <div className="flex items-center gap-3 p-3 mb-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                                <User className="w-5 h-5 text-white" />
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                {avatarUrl ? (
+                                    <img src={avatarUrl} alt={`${user.firstName} ${user.lastName}`} className="w-full h-full object-cover" />
+                                ) : (
+                                    <User className="w-5 h-5 text-white" />
+                                )}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
@@ -116,8 +123,12 @@ export const AdminLayout: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4">
                             <NotificationBell />
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                                <User className="w-4 h-4 text-white" />
+                            <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                {avatarUrl ? (
+                                    <img src={avatarUrl} alt={`${user?.firstName || ''} ${user?.lastName || ''}`} className="w-full h-full object-cover" />
+                                ) : (
+                                    <User className="w-4 h-4 text-white" />
+                                )}
                             </div>
                         </div>
                     </div>

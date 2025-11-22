@@ -56,7 +56,19 @@ export const useAuth = () => {
   };
 
   const handleAuthResponse = useCallback(async (response: any, isAdmin: boolean = false) => {
-    const { user: userData, token: accessToken, refreshToken } = response.data;
+    // API responses are inconsistent between classic and enhanced auth endpoints,
+    // so normalize the payload before using it.
+    const rawData = response?.data ?? response;
+    const payload = rawData?.data ?? rawData;
+    const userData = payload?.user;
+    const accessToken =
+      payload?.accessToken ??
+      payload?.token ??
+      payload?.tokens?.accessToken ??
+      payload?.tokens?.token;
+    const refreshToken =
+      payload?.refreshToken ??
+      payload?.tokens?.refreshToken;
 
     if (!userData || !accessToken) {
       throw new Error('Invalid authentication response');

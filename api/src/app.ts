@@ -2,11 +2,20 @@ import express from 'express';
 import cors from 'cors';
 import { env } from './core/config/env.js';
 import { errorHandler, notFoundHandler } from './api/middleware/errorHandler.js';
+import { authMiddleware } from './api/middleware/authMiddleware.js';
+import { UPLOADS_ROOT } from './utils/filePaths.js';
 
 // Routes - ONLY AUTH
 import authRoutes from './api/routes/auth.js';
 import courseRoutes from './api/routes/courses.js';
 import { categoriesPublicRouter, categoriesAdminRouter } from './api/routes/categories.js';
+import educationRoutes from './api/routes/education.routes.js';
+import docsRoutes from './api/routes/docs.js';
+import userManagementRoutes from './api/routes/userManagementRoutes.js';
+import studentManagementRoutes from './api/routes/studentManagementRoutes.js';
+import permissionRoutes from './api/routes/permissionRoutes.js';
+import activityLogRoutes from './api/routes/activityLogRoutes.js';
+import uploadRoutes from './api/routes/upload.js';
 
 const app = express();
 
@@ -31,6 +40,7 @@ app.use((req, res, next) => {
 // ============================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(UPLOADS_ROOT));
 
 // ============================================
 // 3. Request Logging (Development)
@@ -58,12 +68,27 @@ app.get('/api/health', (req, res) => {
 // Auth routes
 app.use('/api/auth', authRoutes);
 
+// Upload routes (protected)
+app.use('/api/upload', uploadRoutes);
+
 // Course routes (public and protected)
 app.use('/api/courses', courseRoutes);
 
 // Category routes
 app.use('/api/categories', categoriesPublicRouter);
 app.use('/api/admin/categories', categoriesAdminRouter);
+
+// Education routes (protected)
+app.use('/api/education', educationRoutes);
+
+// Admin routes
+app.use('/api/admin/users', authMiddleware, userManagementRoutes);
+app.use('/api/admin/students', authMiddleware, studentManagementRoutes);
+app.use('/api/admin/permissions', authMiddleware, permissionRoutes);
+app.use('/api/admin/activity-logs', authMiddleware, activityLogRoutes);
+
+// Docs
+app.use('/api/docs', docsRoutes);
 
 // ============================================
 // 5. 404 Handler

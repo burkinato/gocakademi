@@ -12,6 +12,7 @@ import { Modal } from '../shared/Modal';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
 import { canSeeActiveToggle, transitionStyle } from '../../utils/visibility';
+import { getAssetUrl } from '../../utils/media';
 
 export const AdminUsers: React.FC = () => {
     const navigate = useNavigate();
@@ -33,7 +34,7 @@ export const AdminUsers: React.FC = () => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [confirmUserId, setConfirmUserId] = useState<number | null>(null);
     const [confirmStep, setConfirmStep] = useState<1 | 2>(1);
-    const { user: currentUser } = useAuthStore();
+    const { user: currentUser, updateUser: updateAuthUser } = useAuthStore();
 
     useEffect(() => {
         fetchUsers({ page: 1, limit: 10 });
@@ -53,7 +54,15 @@ export const AdminUsers: React.FC = () => {
     const handleSaveUser = async (data: Partial<User>) => {
         try {
             if (editingUser) {
-                await updateUser(editingUser.id, data);
+                const updated = await updateUser(editingUser.id, data);
+                if (currentUser && updated.id === currentUser.id) {
+                    updateAuthUser({
+                        profileImageUrl: updated.profileImageUrl,
+                        firstName: updated.firstName,
+                        lastName: updated.lastName,
+                        email: updated.email,
+                    });
+                }
                 toast.success('Kullanıcı başarıyla güncellendi', { duration: 3000 });
             } else {
                 await createUser(data);
@@ -110,8 +119,15 @@ export const AdminUsers: React.FC = () => {
             header: 'Ad Soyad',
             render: (user: User) => (
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm">
-                        {user.firstName[0]}{user.lastName[0]}
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center text-primary font-medium text-sm">
+                        {user.profileImageUrl ? (
+                            <img src={getAssetUrl(user.profileImageUrl) || user.profileImageUrl} alt={`${user.firstName}`} className="w-full h-full object-cover" />
+                        ) : (
+                            <>
+                                {user.firstName?.[0]}
+                                {user.lastName?.[0]}
+                            </>
+                        )}
                     </div>
                     <div>
                         <p className="font-medium text-text-light dark:text-text-dark">{user.firstName} {user.lastName}</p>

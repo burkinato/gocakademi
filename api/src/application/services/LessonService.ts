@@ -15,4 +15,12 @@ export class LessonService {
     const count = await this.repo.createBulk(courseId, lessons);
     return { created: count };
   }
+
+  async replaceCourseLessons(courseId: number, lessons: LessonInput[]) {
+    await this.repo.deleteByCourse(courseId);
+    if (lessons.length === 0) {
+      return { created: 0 };
+    }
+    return this.createBulk(courseId, lessons);
+  }
 }

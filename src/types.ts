@@ -8,7 +8,12 @@ export interface Course {
   price: number;
   imageUrl: string;
   category: string;
-  level: 'Başlangıç' | 'Orta' | 'İleri';
+  level: 'Başlangıç' | 'Orta' | 'İleri' | 'beginner' | 'intermediate' | 'advanced';
+  description?: string;
+  duration?: number;
+  isPublished?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Feature {
@@ -61,6 +66,28 @@ export type UserRole = 'guest' | 'user' | 'admin' | 'student' | 'instructor';
 
 export type ContentType = 'video' | 'pdf' | 'text' | 'quiz';
 
+export interface AttachmentResource {
+  id: string;
+  name: string;
+  url?: string;
+  dataUrl?: string;
+  type: 'file' | 'link';
+}
+
+export interface QuizQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+  answerIndex: number;
+  explanation?: string;
+}
+
+export interface QuizConfig {
+  durationMinutes?: number;
+  allowRetry?: boolean;
+  questions: QuizQuestion[];
+}
+
 export interface CurriculumItem {
   id: string;
   title: string;
@@ -69,6 +96,18 @@ export interface CurriculumItem {
   isRequired: boolean;
   contentUrl?: string;
   textContent?: string;
+  richTextContent?: string;
+  videoAsset?: {
+    source: 'upload' | 'url';
+    name: string;
+    size: number;
+    mimeType: string;
+    previewUrl?: string;
+    file?: File | null;
+  } | null;
+  attachments?: AttachmentResource[];
+  quiz?: QuizConfig;
+  metadata?: Record<string, any>;
   fileName?: string;
 }
 
@@ -100,6 +139,12 @@ export type Page =
 // ============================================================================
 
 // User Management
+export interface EmergencyContact {
+  name: string;
+  phone: string;
+  relationship?: string;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -116,6 +161,21 @@ export interface User {
   dateOfBirth?: string;
   profileImageUrl?: string;
   bio?: string;
+  jobTitle?: string;
+  company?: string;
+  industry?: string;
+  street?: string;
+  neighborhood?: string;
+  district?: string;
+  secondaryEmail?: string;
+  website?: string;
+  linkedin?: string;
+  newsletterEnabled?: boolean;
+  smsNotificationsEnabled?: boolean;
+  marketingOptIn?: boolean;
+  notes?: string;
+  additionalPhones?: string[];
+  emergencyContacts?: EmergencyContact[];
   lastLoginAt?: string;
   emailVerified: boolean;
   phoneVerified: boolean;

@@ -1,3 +1,9 @@
+export interface EmergencyContact {
+  name: string;
+  phone: string;
+  relationship?: string;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -19,6 +25,21 @@ export interface User {
   dateOfBirth?: Date;
   profileImageUrl?: string;
   bio?: string;
+  jobTitle?: string;
+  company?: string;
+  industry?: string;
+  street?: string;
+  neighborhood?: string;
+  district?: string;
+  secondaryEmail?: string;
+  website?: string;
+  linkedin?: string;
+  newsletterEnabled?: boolean;
+  smsNotificationsEnabled?: boolean;
+  marketingOptIn?: boolean;
+  notes?: string;
+  additionalPhones?: string[];
+  emergencyContacts?: EmergencyContact[];
 
   // Authentication & Security
   lastLoginAt?: Date;

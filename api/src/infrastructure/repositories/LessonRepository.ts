@@ -9,6 +9,7 @@ export interface LessonInput {
   duration?: number;
   contentType?: 'video'|'text'|'pdf'|'quiz';
   isRequired?: boolean;
+  metadata?: Record<string, any>;
 }
 
 export class LessonRepository {
@@ -21,8 +22,8 @@ export class LessonRepository {
     let created = 0;
     for (const [idx, l] of lessons.entries()) {
       await query(
-        `INSERT INTO lessons (course_id, title, content, video_url, order_index, duration, unit_title, content_type, is_required)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO lessons (course_id, title, content, video_url, order_index, duration, unit_title, content_type, is_required, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           courseId,
           l.title,
@@ -33,10 +34,15 @@ export class LessonRepository {
           l.unitTitle || null,
           l.contentType || null,
           l.isRequired ?? true,
+          l.metadata ?? {},
         ]
       );
       created++;
     }
     return created;
+  }
+
+  async deleteByCourse(courseId: number): Promise<void> {
+    await query('DELETE FROM lessons WHERE course_id = $1', [courseId]);
   }
 }

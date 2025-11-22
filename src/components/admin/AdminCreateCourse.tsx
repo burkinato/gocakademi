@@ -1,30 +1,62 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../shared/Button';
 import { apiClient } from '../../services/api';
-import { CurriculumUnit, CurriculumItem, ContentType } from '../../types';
+import { CurriculumUnit, CurriculumItem, ContentType, QuizConfig, AttachmentResource } from '../../types';
+import { toast } from 'react-hot-toast';
+import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
+import { RichTextEditor } from './RichTextEditor';
+import { VideoDropzone } from './VideoDropzone';
+import { QuizBuilder } from './QuizBuilder';
 
-export const AdminCreateCourse: React.FC = () => {
+const createInitialCurriculum = (): CurriculumUnit[] => [
+  {
+    id: `unit-${Date.now()}`,
+    title: 'Bölüm 1: Giriş',
+    items: []
+  }
+];
+
+interface AdminCourseBuilderProps {
+  mode?: 'create' | 'edit';
+  initialCourse?: {
+    title?: string;
+    description?: string;
+    category?: string;
+    level?: string;
+    price?: number | string;
+    imageUrl?: string;
+    isPublished?: boolean;
+  };
+  initialCurriculum?: CurriculumUnit[];
+  courseId?: number;
+}
+
+export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
+  mode = 'create',
+  initialCourse,
+  initialCurriculum,
+  courseId,
+}) => {
   const navigate = useNavigate();
+  const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=1600&q=80';
+  const generateId = () => crypto.randomUUID?.() ?? `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const isEditMode = mode === 'edit';
   // Form States
   const [courseDetails, setCourseDetails] = useState({
-    title: '',
-    description: '',
-    category: 'Yazılım',
-    level: 'beginner',
-    price: '',
+    title: initialCourse?.title || '',
+    description: initialCourse?.description || '',
+    category: initialCourse?.category || 'Yazılım',
+    level: initialCourse?.level || 'beginner',
+    price: initialCourse?.price ? String(initialCourse.price) : '',
     image: null as File | null,
-    imagePreview: '' as string,
+    imagePreview: initialCourse?.imageUrl || '',
   });
 
   // Curriculum State
-  const [curriculum, setCurriculum] = useState<CurriculumUnit[]>([
-    {
-      id: 'u1',
-      title: 'Bölüm 1: Giriş',
-      items: []
-    }
-  ]);
+  const [curriculum, setCurriculum] = useState<CurriculumUnit[]>(() =>
+    initialCurriculum && initialCurriculum.length ? initialCurriculum : createInitialCurriculum()
+  );
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,7 +67,6 @@ export const AdminCreateCourse: React.FC = () => {
   const [newItemContent, setNewItemContent] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-  const [autoSaveMessage, setAutoSaveMessage] = useState<string>('');
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [categories, setCategories] = useState<Array<{ id: number; name: string; parentId?: number | null; order: number }>>([]);
   const [categoryError, setCategoryError] = useState<string>('');
@@ -43,19 +74,162 @@ export const AdminCreateCourse: React.FC = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: string; name: string; count: number } | null>(null);
   const [checkingCategoryCourses, setCheckingCategoryCourses] = useState(false);
+  const [curriculumStats, setCurriculumStats] = useState({
+    unitCount: 1,
+    lessonCount: 0,
+    requiredCount: 0,
+    totalDurationMinutes: 0,
+  });
+  const [newItemRichText, setNewItemRichText] = useState('');
+  const [newItemVideoAsset, setNewItemVideoAsset] = useState<CurriculumItem['videoAsset']>(null);
+  const [newItemQuiz, setNewItemQuiz] = useState<QuizConfig>({ durationMinutes: 0, allowRetry: false, questions: [] });
+  const [newItemAttachments, setNewItemAttachments] = useState<AttachmentResource[]>([]);
+  const [newAttachmentName, setNewAttachmentName] = useState('');
+  const [newAttachmentUrl, setNewAttachmentUrl] = useState('');
+  const [editingItem, setEditingItem] = useState<{ unitId: string; itemId: string } | null>(null);
+  const [parentDrafts, setParentDrafts] = useState<Record<number, number | null>>({});
+  const [saving, setSaving] = useState(false);
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.order - b.order),
+    [categories]
+  );
+
+  const formatMinutes = (minutes: number) => {
+    if (!minutes) return '0 dk';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (!hours) return `${mins} dk`;
+    if (!mins) return `${hours} sa`;
+    return `${hours} sa ${mins} dk`;
+  };
+
+  const calculateStats = useCallback((data: CurriculumUnit[]) => {
+    let lessonCount = 0;
+    let requiredCount = 0;
+    let totalMinutes = 0;
+
+    data.forEach(unit => {
+      unit.items.forEach(item => {
+        lessonCount += 1;
+        if (item.isRequired) requiredCount += 1;
+        const asNumber = parseInt(item.duration || '0', 10);
+        if (!Number.isNaN(asNumber) && asNumber > 0) {
+          totalMinutes += asNumber;
+        }
+      });
+    });
+
+    return {
+      unitCount: data.length,
+      lessonCount,
+      requiredCount,
+      totalDurationMinutes: totalMinutes,
+    };
+  }, []);
+
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    if (result.type === 'UNIT') {
+      setCurriculum(prev => {
+        const next = Array.from(prev);
+        const [removed] = next.splice(result.source.index, 1);
+        next.splice(result.destination!.index, 0, removed);
+        return next;
+      });
+      return;
+    }
+
+    const sourceUnitId = result.source.droppableId.replace('items-', '');
+    const destinationUnitId = result.destination.droppableId.replace('items-', '');
+
+    setCurriculum(prev => {
+      const updated = prev.map(unit => ({ ...unit, items: [...unit.items] }));
+      const sourceUnit = updated.find(unit => unit.id === sourceUnitId);
+      const destinationUnit = updated.find(unit => unit.id === destinationUnitId);
+
+      if (!sourceUnit || !destinationUnit) {
+        return prev;
+      }
+
+      const [movedItem] = sourceUnit.items.splice(result.source.index, 1);
+      destinationUnit.items.splice(result.destination!.index, 0, movedItem);
+      return updated;
+    });
+  };
+
+  const sanitizeCurriculumForStorage = useCallback((data: CurriculumUnit[]) => {
+    return data.map(unit => ({
+      ...unit,
+      items: unit.items.map(item => {
+        const sanitizedAttachments = (item.attachments || []).map(att => ({
+          id: att.id,
+          name: att.name,
+          url: att.url,
+          type: att.type,
+        }));
+        const sanitizedVideoAsset = item.videoAsset
+          ? {
+              source: item.videoAsset.source,
+              name: item.videoAsset.name,
+              size: item.videoAsset.size,
+              mimeType: item.videoAsset.mimeType,
+            }
+          : null;
+        const sanitizedMetadata = {
+          quiz: item.quiz || null,
+          richTextEnabled: Boolean(item.richTextContent),
+          attachments: sanitizedAttachments,
+          videoAsset: sanitizedVideoAsset,
+        };
+
+        return {
+          ...item,
+          videoAsset: sanitizedVideoAsset,
+          attachments: sanitizedAttachments,
+          metadata: sanitizedMetadata,
+        };
+      }),
+    }));
+  }, []);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      const version = { timestamp: Date.now(), curriculum };
-      const versions = JSON.parse(localStorage.getItem('curriculum_versions') || '[]');
-      versions.unshift(version);
-      localStorage.setItem('curriculum_versions', JSON.stringify(versions.slice(0, 10)));
-      localStorage.setItem('curriculum_draft', JSON.stringify(curriculum));
-      setAutoSaveMessage('Taslak kaydedildi');
-      setTimeout(() => setAutoSaveMessage(''), 1500);
-    }, 800);
-    return () => clearTimeout(handler);
-  }, [curriculum]);
+    if (mode === 'edit') {
+      if (initialCurriculum && initialCurriculum.length) {
+        setCurriculum(initialCurriculum);
+        setCurriculumStats(calculateStats(initialCurriculum));
+      }
+      if (initialCourse) {
+        setCourseDetails(prev => ({
+          ...prev,
+          title: initialCourse.title || '',
+          description: initialCourse.description || '',
+          category: initialCourse.category || prev.category,
+          level: initialCourse.level || prev.level,
+          price: initialCourse.price ? String(initialCourse.price) : '',
+          imagePreview: initialCourse.imageUrl || prev.imagePreview,
+        }));
+      }
+    }
+  }, [calculateStats, mode, initialCourse, initialCurriculum]);
+
+  useEffect(() => {
+    setCurriculumStats(calculateStats(curriculum));
+  }, [curriculum, calculateStats]);
+
+  const resetItemModal = () => {
+    setNewItemType('video');
+    setNewItemTitle('');
+    setNewItemDuration('');
+    setNewItemContent('');
+    setNewItemRichText('');
+    setNewItemVideoAsset(null);
+    setNewItemQuiz({ durationMinutes: 0, allowRetry: false, questions: [] });
+    setNewItemAttachments([]);
+    setNewAttachmentName('');
+    setNewAttachmentUrl('');
+    setEditingItem(null);
+  };
 
   const restoreLastVersion = () => {
     const versions = JSON.parse(localStorage.getItem('curriculum_versions') || '[]');
@@ -115,6 +289,118 @@ export const AdminCreateCourse: React.FC = () => {
     loadCategories();
   }, []);
 
+  useEffect(() => {
+    if (!categories.length) return;
+    setParentDrafts(prev => {
+      const next: Record<number, number | null> = {};
+      categories.forEach(cat => {
+        if (Object.prototype.hasOwnProperty.call(prev, cat.id)) {
+          next[cat.id] = prev[cat.id];
+        } else {
+          next[cat.id] = cat.parentId ?? null;
+        }
+      });
+      return next;
+    });
+    setCourseDetails(prev => {
+      if (!prev.category || !categories.some(c => c.name === prev.category)) {
+        return { ...prev, category: categories[0]?.name || '' };
+      }
+      return prev;
+    });
+  }, [categories]);
+
+  const handleApplyParent = async (categoryId: number) => {
+    const nextParent = parentDrafts[categoryId] ?? null;
+    try {
+      setCategories(prev => prev.map(cat => (
+        cat.id === categoryId ? { ...cat, parentId: nextParent ?? null } : cat
+      )));
+      setParentDrafts(prev => ({ ...prev, [categoryId]: nextParent ?? null }));
+      await apiClient.updateCategory(categoryId, { parent_id: nextParent });
+      toast.success('Üst kategori güncellendi.');
+    } catch (error) {
+      console.error('Parent category update failed', error);
+      toast.error('Üst kategori güncellenemedi.');
+      await loadCategories();
+    }
+  };
+
+  const handleSaveCourse = async (publish: boolean) => {
+    const trimmedTitle = courseDetails.title.trim();
+    const trimmedDescription = courseDetails.description.trim();
+
+    if (!trimmedTitle) {
+      toast.error('Eğitim adı zorunludur.');
+      return;
+    }
+    if (!trimmedDescription) {
+      toast.error('Açıklama alanı boş olamaz.');
+      return;
+    }
+
+    const priceValue = Number(courseDetails.price || '0');
+    if (Number.isNaN(priceValue) || priceValue < 0) {
+      toast.error('Geçerli bir fiyat girin.');
+      return;
+    }
+
+    if (curriculumStats.lessonCount === 0) {
+      toast.error('En az bir içerik eklemelisiniz.');
+      return;
+    }
+    if (curriculum.some(unit => unit.items.length === 0)) {
+      toast.error('Her modülde en az bir içerik olmalıdır.');
+      return;
+    }
+
+    const durationHours = Math.max(1, Math.round(curriculumStats.totalDurationMinutes / 60) || 0);
+
+    const { user } = JSON.parse(localStorage.getItem('auth-storage') || '{}').state || {};
+    const sanitizedCurriculumPayload = sanitizeCurriculumForStorage(curriculum);
+    const coverImage = courseDetails.imagePreview && !courseDetails.imagePreview.startsWith('data:')
+      ? courseDetails.imagePreview
+      : undefined;
+
+    const payload = {
+      title: trimmedTitle,
+      description: trimmedDescription,
+      category: courseDetails.category,
+      level: courseDetails.level,
+      price: priceValue,
+      duration: durationHours,
+      imageUrl: coverImage || FALLBACK_IMAGE,
+      isPublished: publish,
+      instructorId: user?.id || 1,
+      curriculum: sanitizedCurriculumPayload,
+    };
+    try {
+      setSaving(true);
+      if (isEditMode && courseId) {
+        const result = await apiClient.updateCourse(courseId, payload);
+        if (result.success) {
+          toast.success(publish ? 'Eğitim güncellendi.' : 'Taslak güncellendi.');
+          navigate('/admin/courses');
+        } else {
+          toast.error('Eğitim güncellenemedi. Lütfen tekrar deneyin.');
+        }
+      } else {
+        const result = await apiClient.createCourse(payload);
+        if (result.success) {
+          toast.success(publish ? 'Eğitim oluşturuldu.' : 'Taslak kaydedildi.');
+          navigate('/admin/courses');
+        } else {
+          toast.error('Eğitim oluşturulamadı. Lütfen tekrar deneyin.');
+        }
+      }
+    } catch (e) {
+      console.error('Course save error', e);
+      toast.error('Eğitim kaydedilemedi. Lütfen tekrar deneyin.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Curriculum Handlers
   const addUnit = () => {
     const newUnit: CurriculumUnit = {
@@ -163,36 +449,79 @@ export const AdminCreateCourse: React.FC = () => {
     setCurriculum(curriculum.map(u => u.id === unitId ? { ...u, title: newTitle } : u));
   };
 
-  const openAddItemModal = (unitId: string) => {
+  const openAddItemModal = (unitId: string, editItem?: CurriculumItem) => {
     setActiveUnitId(unitId);
-    setNewItemType('video');
-    setNewItemTitle('');
-    setNewItemDuration('');
-    setNewItemContent('');
+    if (editItem) {
+      setEditingItem({ unitId, itemId: editItem.id });
+      setNewItemType(editItem.type);
+      setNewItemTitle(editItem.title);
+      setNewItemDuration(editItem.duration || '');
+      setNewItemContent(editItem.type === 'pdf' ? editItem.contentUrl || editItem.textContent || '' : '');
+      setNewItemRichText(editItem.richTextContent || '');
+      setNewItemVideoAsset(editItem.videoAsset || (editItem.contentUrl && editItem.type === 'video'
+        ? {
+            source: 'url',
+            name: editItem.contentUrl,
+            size: 0,
+            mimeType: 'text/url',
+          }
+        : null));
+      setNewItemQuiz(editItem.quiz || { durationMinutes: 0, allowRetry: false, questions: [] });
+      setNewItemAttachments(editItem.attachments || []);
+    } else {
+      setEditingItem(null);
+      resetItemModal();
+    }
     setIsModalOpen(true);
   };
 
   const addItem = () => {
-    if (!activeUnitId || !newItemTitle) return;
+    if (!activeUnitId) return;
+    if (!newItemTitle.trim()) {
+      toast.error('İçerik başlığı zorunludur.');
+      return;
+    }
+
+    const itemId = generateId();
+    const attachments = newItemAttachments.filter(att => att.name && (att.url || att.dataUrl));
+
+    const videoContentUrl = newItemType === 'video'
+      ? (newItemVideoAsset?.source === 'url' ? newItemVideoAsset.name : undefined)
+      : undefined;
 
     const newItem: CurriculumItem = {
-      id: `i${Date.now()}`,
+      id: itemId,
       title: newItemTitle,
       type: newItemType,
       duration: newItemDuration,
-      isRequired: true, // Default to mandatory
-      contentUrl: newItemType === 'video' ? newItemContent : undefined,
-      textContent: newItemType === 'text' ? newItemContent : undefined,
+      isRequired: editingItem ? curriculum.find(u => u.id === editingItem.unitId)?.items.find(i => i.id === editingItem.itemId)?.isRequired ?? true : true,
+      contentUrl: newItemType === 'video'
+        ? videoContentUrl
+        : (newItemType === 'pdf' ? newItemContent : undefined),
+      textContent: newItemType === 'pdf' ? newItemContent : undefined,
+      richTextContent: newItemType === 'text' ? newItemRichText : undefined,
+      videoAsset: newItemType === 'video' ? newItemVideoAsset : null,
+      attachments,
+      quiz: newItemType === 'quiz' ? newItemQuiz : undefined,
+      metadata: {
+        attachments,
+        quiz: newItemType === 'quiz' ? newItemQuiz : undefined,
+      },
     };
 
     setCurriculum(curriculum.map(unit => {
-      if (unit.id === activeUnitId) {
-        return { ...unit, items: [...unit.items, newItem] };
+      if (unit.id !== activeUnitId) return unit;
+      if (editingItem && editingItem.unitId === unit.id) {
+        return {
+          ...unit,
+          items: unit.items.map(item => (item.id === editingItem.itemId ? newItem : item)),
+        };
       }
-      return unit;
+      return { ...unit, items: [...unit.items, newItem] };
     }));
 
     setIsModalOpen(false);
+    setEditingItem(null);
   };
 
   const deleteItem = (unitId: string, itemId: string) => {
@@ -218,6 +547,24 @@ export const AdminCreateCourse: React.FC = () => {
       return unit;
     }));
   };
+
+  const addAttachmentResource = () => {
+    if (!newAttachmentName || !newAttachmentUrl) return;
+    const resource: AttachmentResource = {
+      id: generateId(),
+      name: newAttachmentName,
+      url: newAttachmentUrl,
+      type: 'link',
+    };
+    setNewItemAttachments(prev => [...prev, resource]);
+    setNewAttachmentName('');
+    setNewAttachmentUrl('');
+  };
+
+  const removeAttachmentResource = (id: string) => {
+    setNewItemAttachments(prev => prev.filter(att => att.id !== id));
+  };
+
 
   const getIconForType = (type: ContentType) => {
     switch (type) {
@@ -245,46 +592,25 @@ export const AdminCreateCourse: React.FC = () => {
       {/* Page Header */}
       <div className="flex flex-wrap justify-between items-center gap-4 mb-8 sticky top-0 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-sm py-4 z-30 border-b border-transparent">
         <div className="flex min-w-72 flex-col gap-2">
-          <p className="text-3xl font-bold tracking-tight">Yeni Eğitim Oluştur</p>
-          <p className="text-subtext-light dark:text-subtext-dark text-base font-normal">Eğitim detaylarını girin ve profesyonel müfredatınızı oluşturun.</p>
+          <p className="text-3xl font-bold tracking-tight">{isEditMode ? 'Eğitimi Düzenle' : 'Yeni Eğitim Oluştur'}</p>
+          <p className="text-subtext-light dark:text-subtext-dark text-base font-normal">{isEditMode ? 'Var olan eğitimi güncelleyin ve müfredatı yeniden düzenleyin.' : 'Eğitim detaylarını girin ve profesyonel müfredatınızı oluşturun.'}</p>
         </div>
         <div className="flex items-center gap-3">
           <Button
-            variant="ghost"
-            className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-text-light dark:text-text-dark"
+            variant="outline"
+            className="text-text-light dark:text-text-dark"
+            disabled={saving}
+            onClick={() => handleSaveCourse(false)}
           >
-            Önizleme
+            Taslak Olarak Kaydet
           </Button>
           <Button
             variant="primary"
             className="shadow-md"
-            onClick={async () => {
-              const { user, token } = JSON.parse(localStorage.getItem('auth-storage') || '{}').state || {};
-              const payload = {
-                title: courseDetails.title,
-                description: courseDetails.description,
-                category: courseDetails.category,
-                level: courseDetails.level,
-                price: parseFloat(courseDetails.price || '0'),
-                duration: 0,
-                imageUrl: '',
-                isPublished: true,
-                instructorId: user?.id || 1,
-                curriculum,
-              };
-              try {
-                const result = await apiClient.createCourse(payload);
-                if (result.success) {
-                  navigate('/admin/courses');
-                } else {
-                  console.error('Create course failed', result);
-                }
-              } catch (e) {
-                console.error('Create course error', e);
-              }
-            }}
+            disabled={saving}
+            onClick={() => handleSaveCourse(true)}
           >
-            Kaydet ve Yayınla
+            {isEditMode ? 'Yayınla / Güncelle' : 'Kaydet ve Yayınla'}
           </Button>
         </div>
       </div>
@@ -366,6 +692,31 @@ export const AdminCreateCourse: React.FC = () => {
             </div>
           </div>
 
+          {/* Program Summary */}
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Program Özeti</h3>
+            </div>
+            <dl className="space-y-4">
+              <div className="flex items-center justify-between">
+                <dt className="text-sm text-subtext-light dark:text-subtext-dark">Modül Sayısı</dt>
+                <dd className="text-sm font-semibold text-text-light dark:text-text-dark">{curriculumStats.unitCount}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-sm text-subtext-light dark:text-subtext-dark">İçerik Sayısı</dt>
+                <dd className="text-sm font-semibold text-text-light dark:text-text-dark">{curriculumStats.lessonCount}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-sm text-subtext-light dark:text-subtext-dark">Zorunlu İçerik</dt>
+                <dd className="text-sm font-semibold text-text-light dark:text-text-dark">{curriculumStats.requiredCount}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-sm text-subtext-light dark:text-subtext-dark">Toplam Süre</dt>
+                <dd className="text-sm font-semibold text-text-light dark:text-text-dark">{formatMinutes(curriculumStats.totalDurationMinutes)}</dd>
+              </div>
+            </dl>
+          </div>
+
           {/* Organization */}
           <div className="bg-white dark:bg-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
             <h3 className="text-lg font-semibold mb-4 border-b border-gray-100 dark:border-gray-800 pb-2">Organizasyon</h3>
@@ -377,12 +728,14 @@ export const AdminCreateCourse: React.FC = () => {
                   className="form-select rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary/50 h-11 px-3 text-sm dark:text-white"
                   value={courseDetails.category}
                   onChange={(e) => setCourseDetails({ ...courseDetails, category: e.target.value })}
+                  disabled={!sortedCategories.length}
                 >
-                  <option>Yazılım</option>
-                  <option>Pazarlama</option>
-                  <option>Tasarım</option>
-                  <option>Kişisel Gelişim</option>
-                  <option>İş Dünyası</option>
+                  {!sortedCategories.length && <option value="">Kategori bulunamadı</option>}
+                  {sortedCategories.map(category => (
+                    <option key={category.id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
                 </select>
                 <div className="mt-2">
                   <Button variant="outline" size="sm" onClick={() => setCategoryManagerOpen(true)}>
@@ -426,98 +779,146 @@ export const AdminCreateCourse: React.FC = () => {
             </div>
 
             {/* Curriculum List */}
-            <div className="flex flex-col gap-6">
-              {curriculum.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/30">
-                  <span className="material-symbols-outlined text-5xl text-gray-300 mb-3">library_add</span>
-                  <p className="text-gray-500 dark:text-gray-400 font-medium">Henüz bir bölüm eklenmedi.</p>
-                </div>
-              )}
-
-              {curriculum.map((unit) => (
-                <div key={unit.id} className="flex flex-col gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 overflow-hidden">
-                  {/* Unit Header */}
-                  <div className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-3">
-                      <span className="material-symbols-outlined text-gray-400 cursor-grab hover:text-gray-600">drag_indicator</span>
-                      <input
-                        className="font-bold text-text-light dark:text-text-dark bg-transparent border-none focus:ring-0 p-0 w-full"
-                        value={unit.title}
-                        onChange={(e) => updateUnitTitle(unit.id, e.target.value)}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300">
-                        {unit.items.length} İçerik
-                      </span>
-                      <button onClick={() => deleteUnit(unit.id)} className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 transition-colors">
-                        <span className="material-symbols-outlined text-[20px]">delete</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Items List */}
-                  <div className="p-4 pt-2 flex flex-col gap-2">
-                    {unit.items.length === 0 && (
-                      <p className="text-sm text-center text-gray-400 py-4 italic">Bu bölümde henüz içerik yok.</p>
-                    )}
-                    {unit.items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:shadow-sm transition-shadow group">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <span className="material-symbols-outlined text-gray-300 cursor-grab hover:text-gray-500">drag_indicator</span>
-                          <div className={`flex items-center justify-center size-8 rounded-lg ${item.type === 'quiz' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
-                            <span className={`material-symbols-outlined text-[20px] ${getColorForType(item.type)}`}>
-                              {getIconForType(item.type)}
-                            </span>
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <p className="text-sm font-medium text-text-light dark:text-text-dark truncate">{item.title}</p>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-subtext-light dark:text-subtext-dark uppercase tracking-wider font-bold">{item.type === 'text' ? 'Makale' : item.type}</span>
-                              {item.duration && <span className="text-[10px] text-gray-400">• {item.duration}</span>}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-4">
-                          {/* Required Toggle */}
-                          <div
-                            className="flex items-center gap-2 cursor-pointer group/toggle"
-                            onClick={() => toggleRequired(unit.id, item.id)}
-                          >
-                            <span className={`text-xs font-medium ${item.isRequired ? 'text-primary' : 'text-gray-400'}`}>
-                              {item.isRequired ? 'Zorunlu' : 'İsteğe Bağlı'}
-                            </span>
-                            <div className={`w-8 h-4 rounded-full relative transition-colors ${item.isRequired ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                              <div className={`absolute top-0.5 size-3 bg-white rounded-full shadow-sm transition-all ${item.isRequired ? 'left-4.5' : 'left-0.5'}`}></div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 border-l border-gray-200 dark:border-gray-700 pl-3">
-                            <button className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors">
-                              <span className="material-symbols-outlined text-[18px]">edit</span>
-                            </button>
-                            <button onClick={() => deleteItem(unit.id, item.id)} className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 transition-colors">
-                              <span className="material-symbols-outlined text-[18px]">delete</span>
-                            </button>
-                          </div>
-                        </div>
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="curriculum-units" type="UNIT">
+                {(provided) => (
+                  <div className="flex flex-col gap-6" ref={provided.innerRef} {...provided.droppableProps}>
+                    {curriculum.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/30">
+                        <span className="material-symbols-outlined text-5xl text-gray-300 mb-3">library_add</span>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">Henüz bir bölüm eklenmedi.</p>
                       </div>
-                    ))}
+                    )}
 
-                    {/* Add Item Button */}
-                    <Button
-                      onClick={() => openAddItemModal(unit.id)}
-                      variant="outline"
-                      className="w-full border-dashed border-2 border-gray-300 dark:border-gray-700 text-subtext-light dark:text-subtext-dark hover:border-primary hover:text-primary"
-                      icon={<span className="material-symbols-outlined text-[20px]">add</span>}
-                    >
-                      İçerik Ekle (Ders / Sınav)
-                    </Button>
+                    {curriculum.map((unit, unitIndex) => (
+                      <Draggable key={unit.id} draggableId={unit.id} index={unitIndex}>
+                        {(unitProvided) => (
+                          <div
+                            className="flex flex-col gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 overflow-hidden"
+                            ref={unitProvided.innerRef}
+                            {...unitProvided.draggableProps}
+                          >
+                            {/* Unit Header */}
+                            <div className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                              <div className="flex items-center gap-3 w-full">
+                                <span className="material-symbols-outlined text-gray-400 cursor-grab hover:text-gray-600" {...unitProvided.dragHandleProps}>drag_indicator</span>
+                                <input
+                                  className="font-bold text-text-light dark:text-text-dark bg-transparent border-none focus:ring-0 p-0 w-full"
+                                  value={unit.title}
+                                  onChange={(e) => updateUnitTitle(unit.id, e.target.value)}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300">
+                                  {unit.items.length} İçerik
+                                </span>
+                                <button onClick={() => deleteUnit(unit.id)} className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 transition-colors">
+                                  <span className="material-symbols-outlined text-[20px]">delete</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Items List */}
+                            <Droppable droppableId={`items-${unit.id}`} type="ITEM">
+                              {(itemProvided, snapshot) => (
+                                <div
+                                  className={`p-4 pt-2 flex flex-col gap-2 transition-colors ${snapshot.isDraggingOver ? 'bg-primary/5' : ''}`}
+                                  ref={itemProvided.innerRef}
+                                  {...itemProvided.droppableProps}
+                                >
+                                  {unit.items.length === 0 && (
+                                    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/40 py-6 text-center text-sm text-subtext-light dark:text-subtext-dark">
+                                      <span className="material-symbols-outlined text-3xl text-gray-300">inventory_2</span>
+                                      <p className="font-medium">Bu bölümde henüz içerik yok</p>
+                                      <p className="text-xs text-gray-400 dark:text-gray-500">“İçerik ekle” butonunu kullanarak ders / sınav ekleyin.</p>
+                                    </div>
+                                  )}
+                                  {unit.items.map((item, itemIndex) => (
+                                    <Draggable key={item.id} draggableId={`${unit.id}-${item.id}`} index={itemIndex}>
+                                      {(itemDragProvided) => (
+                                        <div
+                                          className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:shadow-sm transition-shadow group"
+                                          ref={itemDragProvided.innerRef}
+                                          {...itemDragProvided.draggableProps}
+                                        >
+                                          <div className="flex items-center gap-3 overflow-hidden">
+                                            <span className="material-symbols-outlined text-gray-300 cursor-grab hover:text-gray-500" {...itemDragProvided.dragHandleProps}>drag_indicator</span>
+                                            <div className={`flex items-center justify-center size-9 rounded-lg ${item.type === 'quiz' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
+                                              <span className={`material-symbols-outlined text-[20px] ${getColorForType(item.type)}`}>
+                                                {getIconForType(item.type)}
+                                              </span>
+                                            </div>
+                                            <div className="flex flex-col min-w-0">
+                                              <p className="text-sm font-medium text-text-light dark:text-text-dark truncate">{item.title}</p>
+                                              <div className="flex items-center gap-2 text-[11px] text-subtext-light dark:text-subtext-dark">
+                                                <span className="uppercase tracking-widest font-semibold">{item.type === 'text' ? 'Makale' : item.type}</span>
+                                                {item.duration && <span>• {item.duration} dk</span>}
+                                                {item.attachments && item.attachments.length > 0 && (
+                                                  <span className="inline-flex items-center gap-1">
+                                                    <span className="material-symbols-outlined text-xs">attach_file</span>
+                                                    {item.attachments.length} dosya
+                                                  </span>
+                                                )}
+                                                {item.quiz && (
+                                                  <span className="inline-flex items-center gap-1 text-amber-500">
+                                                    <span className="material-symbols-outlined text-xs">quiz</span>
+                                                    {item.quiz.questions.length} soru
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-4">
+                                            {/* Required Toggle */}
+                                            <div
+                                              className="flex items-center gap-2 cursor-pointer group/toggle"
+                                              onClick={() => toggleRequired(unit.id, item.id)}
+                                            >
+                                              <span className={`text-xs font-medium ${item.isRequired ? 'text-primary' : 'text-gray-400'}`}>
+                                                {item.isRequired ? 'Zorunlu' : 'İsteğe Bağlı'}
+                                              </span>
+                                              <div className={`w-9 h-4 rounded-full relative transition-colors ${item.isRequired ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                                <div className={`absolute top-0.5 size-3 bg-white rounded-full shadow-sm transition-all ${item.isRequired ? 'left-4.5' : 'left-0.5'}`}></div>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-1 border-l border-gray-200 dark:border-gray-700 pl-3">
+                                              <button className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors" onClick={() => openAddItemModal(unit.id, item)}>
+                                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                                              </button>
+                                              <button onClick={() => deleteItem(unit.id, item.id)} className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 transition-colors">
+                                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  ))}
+                                  {itemProvided.placeholder}
+
+                                  {/* Add Item Button */}
+                                  <Button
+                                    onClick={() => openAddItemModal(unit.id)}
+                                    variant="outline"
+                                    className="w-full border-dashed border-2 border-gray-300 dark:border-gray-700 text-subtext-light dark:text-subtext-dark hover:border-primary hover:text-primary mt-2"
+                                    icon={<span className="material-symbols-outlined text-[20px]">add</span>}
+                                  >
+                                    İçerik Ekle (Ders / Sınav)
+                                  </Button>
+                                </div>
+                              )}
+                            </Droppable>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           </div>
         </div>
       </div>
@@ -527,8 +928,8 @@ export const AdminCreateCourse: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 animate-fadeIn resize overflow-auto">
             <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="text-xl font-bold text-text-light dark:text-text-dark">Yeni İçerik Ekle</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+              <h3 className="text-xl font-bold text-text-light dark:text-text-dark">{editingItem ? 'İçeriği Düzenle' : 'Yeni İçerik Ekle'}</h3>
+              <button onClick={() => { setIsModalOpen(false); resetItemModal(); }} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -569,71 +970,82 @@ export const AdminCreateCourse: React.FC = () => {
 
                 {/* Conditional Fields Based on Type */}
                 {newItemType === 'video' && (
-                  <div className="space-y-2">
-                    <label className="block">
-                      <span className="text-sm font-medium text-text-light dark:text-text-dark">Video URL</span>
-                      <input
-                        type="text"
-                        className="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3 focus:ring-2 focus:ring-primary/50 dark:text-white"
-                        placeholder="https://vimeo.com/..."
-                        value={newItemContent}
-                        onChange={(e) => setNewItemContent(e.target.value)}
-                      />
-                    </label>
-                    <div
-                      className="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 p-4 text-center"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) { const url = URL.createObjectURL(file); setNewItemContent(url); } }}
-                    >
-                      Video dosyasını buraya sürükleyin veya link girin.
-                    </div>
-                    {newItemContent && (
-                      <video src={newItemContent} controls className="w-full rounded-lg" />
-                    )}
-                  </div>
+                  <VideoDropzone value={newItemVideoAsset} onChange={setNewItemVideoAsset} />
                 )}
 
                 {newItemType === 'pdf' && (
                   <div className="space-y-2">
-                    <input type="text" className="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3" placeholder="PDF URL" onChange={(e) => setNewItemContent(e.target.value)} />
-                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4 text-sm text-gray-500 text-center">
-                      PDF dosyasını sürükleyip bırakın veya URL girin.
-                    </div>
-                    {newItemContent && (<a href={newItemContent} target="_blank" rel="noreferrer" className="text-primary text-sm">PDF Önizlemeyi aç</a>)}
+                    <label className="block text-sm font-medium text-text-light dark:text-text-dark">PDF veya doküman bağlantısı</label>
+                    <input
+                      type="url"
+                      className="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3"
+                      placeholder="https://docs.google.com/..."
+                      value={newItemContent}
+                      onChange={(e) => setNewItemContent(e.target.value)}
+                    />
+                    <p className="text-xs text-subtext-light dark:text-subtext-dark">İsterseniz dosya bağlantısını aşağıdaki kaynaklar bölümüne de ekleyebilirsiniz.</p>
                   </div>
                 )}
 
                 {newItemType === 'text' && (
-                  <label className="block">
-                    <span className="text-sm font-medium text-text-light dark:text-text-dark">İçerik</span>
-                    <div className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 min-h-24 focus:ring-2 focus:ring-primary/50 dark:text-white" contentEditable role="textbox"
-                      onInput={(e) => setNewItemContent((e.target as HTMLDivElement).innerHTML)}
-                      suppressContentEditableWarning
-                    >
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<b>Kalın</b>')}>Kalın</button>
-                      <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<i>İtalik</i>')}>İtalik</button>
-                      <button type="button" className="px-2 py-1 text-xs rounded bg-gray-200 dark:bg-gray-700" onClick={() => setNewItemContent(prev => prev + '<code>code</code>')}>Kod</button>
-                    </div>
-                  </label>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text-light dark:text-text-dark">İçerik</label>
+                    <RichTextEditor
+                      value={newItemRichText}
+                      onChange={setNewItemRichText}
+                      placeholder="Metninizi buraya yazın..."
+                    />
+                  </div>
                 )}
 
                 {newItemType === 'quiz' && (
-                  <div className="p-4 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-900/20">
-                    <p className="text-sm text-amber-800 dark:text-amber-400 font-medium flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px]">info</span>
-                      Sınav sorularını içerik eklendikten sonra düzenleyebilirsiniz.
-                    </p>
-                  </div>
+                  <QuizBuilder value={newItemQuiz} onChange={setNewItemQuiz} />
                 )}
+
+                {/* Attachment Resources */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-text-light dark:text-text-dark">Ek Kaynaklar</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Kaynak adı"
+                        value={newAttachmentName}
+                        onChange={(e) => setNewAttachmentName(e.target.value)}
+                        className="form-input text-xs rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                      />
+                      <input
+                        type="url"
+                        placeholder="https://"
+                        value={newAttachmentUrl}
+                        onChange={(e) => setNewAttachmentUrl(e.target.value)}
+                        className="form-input text-xs rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+                      />
+                      <Button size="sm" variant="outline" onClick={addAttachmentResource} disabled={!newAttachmentName || !newAttachmentUrl}>
+                        Ekle
+                      </Button>
+                    </div>
+                  </div>
+                  {newItemAttachments.length > 0 && (
+                    <ul className="space-y-2">
+                      {newItemAttachments.map(att => (
+                        <li key={att.id} className="flex items-center justify-between text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+                          <span className="truncate">{att.name}</span>
+                          <button className="text-xs text-red-500 hover:text-red-700" onClick={() => removeAttachmentResource(att.id)}>
+                            Sil
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
                 <label className="block">
                   <span className="text-sm font-medium text-text-light dark:text-text-dark">Süre / Soru Sayısı</span>
                   <input
-                    type="text"
+                    type="number"
                     className="mt-1 w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3 focus:ring-2 focus:ring-primary/50 dark:text-white"
-                    placeholder="Örn: 15dk veya 10 Soru"
+                    placeholder="Dakika cinsinden süre"
                     value={newItemDuration}
                     onChange={(e) => setNewItemDuration(e.target.value)}
                   />
@@ -643,7 +1055,7 @@ export const AdminCreateCourse: React.FC = () => {
 
             <div className="p-6 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3">
               <Button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => { setIsModalOpen(false); resetItemModal(); }}
                 variant="outline"
               >
                 İptal
@@ -654,7 +1066,7 @@ export const AdminCreateCourse: React.FC = () => {
                 className="shadow-md"
                 disabled={!newItemTitle}
               >
-                Ekle
+                {editingItem ? 'Güncelle' : 'Ekle'}
               </Button>
             </div>
           </div>
@@ -700,17 +1112,38 @@ export const AdminCreateCourse: React.FC = () => {
                       }} />
                     </div>
                     <div className="flex items-center gap-2">
-                      <select className="border rounded px-2 py-1 text-sm" value={c.parentId || ''} onChange={async (e) => {
-                        const pid = e.target.value || '';
-                        const parentId = pid === '' ? null : Number(pid);
-                        setCategories(prev => prev.map(x => x.id === c.id ? { ...x, parentId } : x));
-                        await apiClient.updateCategory(c.id, { parent_id: parentId });
-                      }}>
+                      <Button
+                        size="sm"
+                        variant={courseDetails.category === c.name ? 'primary' : 'outline'}
+                        onClick={() => {
+                          setCourseDetails(prev => ({ ...prev, category: c.name }));
+                          setCategoryManagerOpen(false);
+                        }}
+                      >
+                        {courseDetails.category === c.name ? 'Seçili' : 'Seç'}
+                      </Button>
+                      <select
+                        className="border rounded px-2 py-1 text-sm"
+                        value={(parentDrafts[c.id] ?? null) ?? ''}
+                        onChange={(e) => {
+                          const pid = e.target.value;
+                          const targetParent = pid === '' ? null : Number(pid);
+                          setParentDrafts(prev => ({ ...prev, [c.id]: targetParent }));
+                        }}
+                      >
                         <option value="">Üst kategori yok</option>
                         {categories.filter(x => x.id !== c.id).map(x => (
                           <option key={x.id} value={x.id}>{x.name}</option>
                         ))}
                       </select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleApplyParent(c.id)}
+                        disabled={(parentDrafts[c.id] ?? null) === (c.parentId ?? null)}
+                      >
+                        Uygula
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => handleAskDeleteCategory(c)}>Kaldır</Button>
                     </div>
                   </div>

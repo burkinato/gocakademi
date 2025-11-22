@@ -317,7 +317,8 @@ export const AddTopicModal: React.FC<AddTopicModalProps> = ({
             isOpen={true}
             onClose={onClose}
             title={isEditMode ? 'Konuyu Düzenle' : 'Yeni Konu Ekle'}
-            size="lg"
+            size="xl"
+            bodyClassName="max-h-[80vh]"
         >
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Content Type Selector */}
@@ -354,16 +355,18 @@ export const AddTopicModal: React.FC<AddTopicModalProps> = ({
                 />
 
                 {/* Description */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Açıklama
                     </label>
                     <textarea
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-                        placeholder="Konu hakkında kısa açıklama..."
+                        rows={6}
+                        dir="ltr"
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent transition-colors leading-relaxed resize-none text-left"
+                        style={{ direction: 'ltr' }}
+                        placeholder="Konu hakkında açıklama veya makale içeriği yazın..."
                     />
                 </div>
 

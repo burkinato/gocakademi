@@ -118,6 +118,9 @@ npm run lint
 
 # Manuel auth testi
 node test-auth.js        # /api/auth register/login/me akışı
+
+# Profesyonel sınav içerikli demo kursu oluştur
+node scripts/create-pro-exam-course.mjs
 ```
 
 ## Klasör Yapısı

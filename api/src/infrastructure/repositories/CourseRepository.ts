@@ -1,29 +1,51 @@
 import { query } from '../database/connection.js';
 import { Course } from '../types/index.js';
 
+const columnMap: Record<string, string> = {
+  instructorId: 'instructor_id',
+  imageUrl: 'image_url',
+  isPublished: 'is_published',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+};
+
+const toSnakeCase = (key: string): string => {
+  if (columnMap[key]) return columnMap[key];
+  return key.replace(/([A-Z])/g, '_$1').toLowerCase();
+};
+
 export class CourseRepository {
   async findById(id: number): Promise<Course | null> {
     const result = await query('SELECT * FROM courses WHERE id = $1', [id]);
     return result.rows[0] || null;
   }
 
-  async findAll(limit: number = 10, offset: number = 0, category?: string, level?: string): Promise<Course[]> {
-    let queryText = 'SELECT * FROM courses WHERE is_published = true';
+  async findAll(limit: number = 10, offset: number = 0, category?: string, level?: string, includeAll: boolean = false): Promise<Course[]> {
+    let queryText = 'SELECT * FROM courses';
+    const conditions: string[] = [];
     const params: any[] = [];
-    
+
+    if (!includeAll) {
+      conditions.push('is_published = true');
+    }
+
     if (category) {
-      queryText += ' AND category = $' + (params.length + 1);
+      conditions.push(`category = $${params.length + 1}`);
       params.push(category);
     }
-    
+
     if (level) {
-      queryText += ' AND level = $' + (params.length + 1);
+      conditions.push(`level = $${params.length + 1}`);
       params.push(level);
     }
-    
-    queryText += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+
+    if (conditions.length) {
+      queryText += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    queryText += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
-    
+
     const result = await query(queryText, params);
     return result.rows;
   }
@@ -49,11 +71,17 @@ export class CourseRepository {
   }
 
   async update(id: number, courseData: Partial<Course>): Promise<Course | null> {
-    const fields = Object.keys(courseData).map((key, index) => `${key} = $${index + 2}`).join(', ');
-    const values = Object.values(courseData);
-    
+    const entries = Object.entries(courseData || {}).filter(([, value]) => value !== undefined);
+    if (!entries.length) {
+      const existing = await this.findById(id);
+      return existing;
+    }
+
+    const setClauses = entries.map(([key], index) => `${toSnakeCase(key)} = $${index + 2}`);
+    const values = entries.map(([, value]) => value);
+
     const result = await query(
-      `UPDATE courses SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+      `UPDATE courses SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
       [id, ...values]
     );
     return result.rows[0] || null;

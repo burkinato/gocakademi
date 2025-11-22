@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS lessons (
     title VARCHAR(255) NOT NULL,
     content TEXT,
     video_url VARCHAR(500),
+    metadata JSONB DEFAULT '{}'::jsonb,
     order_index INTEGER DEFAULT 0,
     duration INTEGER, -- in minutes
     unit_title VARCHAR(255),
@@ -127,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_blog_posts_author ON blog_posts(author_id);
 CREATE INDEX IF NOT EXISTS idx_blog_posts_published ON blog_posts(is_published);
 CREATE INDEX IF NOT EXISTS idx_reviews_user ON reviews(user_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_course ON reviews(course_id);
+ALTER TABLE IF EXISTS lessons ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -125,7 +125,37 @@ export const getUserWithPermissions = async (req: Request, res: Response<ApiResp
  */
 export const createUser = async (req: Request, res: Response<ApiResponse<any>>) => {
     try {
-        const { email, password, firstName, lastName, role, phone, address, city, state, country, postalCode, dateOfBirth, bio } = req.body;
+        const {
+            email,
+            password,
+            firstName,
+            lastName,
+            role,
+            phone,
+            address,
+            city,
+            state,
+            country,
+            postalCode,
+            dateOfBirth,
+            bio,
+            jobTitle,
+            company,
+            industry,
+            street,
+            neighborhood,
+            district,
+            secondaryEmail,
+            website,
+            linkedin,
+            newsletterEnabled,
+            smsNotificationsEnabled,
+            marketingOptIn,
+            notes,
+            additionalPhones,
+            emergencyContacts,
+            profileImageUrl,
+        } = req.body;
 
         // Validation
         if (!email || !password || !firstName || !lastName || !role) {
@@ -176,6 +206,22 @@ export const createUser = async (req: Request, res: Response<ApiResponse<any>>) 
                 postalCode,
                 dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
                 bio,
+                jobTitle,
+                company,
+                industry,
+                street,
+                neighborhood,
+                district,
+                secondaryEmail,
+                website,
+                linkedin,
+                newsletterEnabled,
+                smsNotificationsEnabled,
+                marketingOptIn,
+                notes,
+                additionalPhones,
+                emergencyContacts,
+                profileImageUrl,
             },
             ipAddress
         );

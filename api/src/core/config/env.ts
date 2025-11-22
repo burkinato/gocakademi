@@ -5,8 +5,9 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-config({ path: join(__dirname, '../../.env') });
-config({ path: join(__dirname, '../../.env.local') });
+// Load env from project root (../../../../.env relative to this file)
+config({ path: join(__dirname, '../../../../.env') });
+config({ path: join(__dirname, '../../../../.env.local') });
 
 const isProduction = process.env.NODE_ENV === 'production';
 
