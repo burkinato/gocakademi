@@ -79,13 +79,29 @@ export interface QuizQuestion {
   prompt: string;
   options: string[];
   answerIndex: number;
+  points?: number;
   explanation?: string;
 }
 
 export interface QuizConfig {
-  durationMinutes?: number;
-  allowRetry?: boolean;
+  durationMinutes: number;
+  allowRetry: boolean;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  showCorrectAnswers?: boolean;
+  passingScore?: number;
+  maxAttempts?: number | null;
   questions: QuizQuestion[];
+}
+
+export interface FinalAssessment {
+  id: string;
+  title: string;
+  description?: string;
+  quiz: QuizConfig;
+  passingScore: number;
+  isRequired: boolean;
+  certificateEligible: boolean;
 }
 
 export interface CurriculumItem {

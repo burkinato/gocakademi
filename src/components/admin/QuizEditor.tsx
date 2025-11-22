@@ -47,6 +47,8 @@ const questionTypeLabels: Record<QuestionType, string> = {
 interface SortableQuestionItemProps {
     question: QuizQuestion;
     index: number;
+    quiz: Quiz;
+    onChange: (quiz: Quiz) => void;
     onEdit: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
@@ -56,6 +58,8 @@ interface SortableQuestionItemProps {
 const SortableQuestionItem: React.FC<SortableQuestionItemProps> = ({
     question,
     index,
+    quiz,
+    onChange,
     onEdit,
     onDuplicate,
     onDelete,
@@ -154,14 +158,102 @@ const SortableQuestionItem: React.FC<SortableQuestionItemProps> = ({
                 </Accordion.Header>
 
                 <Accordion.Content className="p-4 pt-0 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                        type="button"
-                        onClick={onEdit}
-                        className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                    >
-                        <Edit className="w-4 h-4 inline mr-2" />
-                        Düzenle
-                    </button>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Soru Metni
+                            </label>
+                            <textarea
+                                value={question.text}
+                                onChange={(e) => {
+                                    const newQuestions = quiz.questions.map((q) =>
+                                        q.id === question.id ? { ...q, text: e.target.value } : q
+                                    );
+                                    onChange({ ...quiz, questions: newQuestions });
+                                }}
+                                placeholder="Soru metnini girin..."
+                                rows={3}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Puan
+                            </label>
+                            <input
+                                type="number"
+                                min={1}
+                                value={question.points}
+                                onChange={(e) => {
+                                    const newQuestions = quiz.questions.map((q) =>
+                                        q.id === question.id ? { ...q, points: Number(e.target.value) } : q
+                                    );
+                                    onChange({ ...quiz, questions: newQuestions });
+                                }}
+                                className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                            />
+                        </div>
+
+                        {question.options && question.options.length > 0 && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Seçenekler
+                                </label>
+                                <div className="space-y-2">
+                                    {question.options.map((option, optIndex) => (
+                                        <div key={option.id} className="flex items-center gap-2">
+                                            <input
+                                                type={question.type === 'multiple-select' ? 'checkbox' : 'radio'}
+                                                name={`correct-${question.id}`}
+                                                checked={option.isCorrect}
+                                                onChange={(e) => {
+                                                    const newQuestions = quiz.questions.map((q) => {
+                                                        if (q.id === question.id && q.options) {
+                                                            const newOptions = q.options.map((opt, idx) => ({
+                                                                ...opt,
+                                                                isCorrect: question.type === 'multiple-select'
+                                                                    ? (idx === optIndex ? e.target.checked : opt.isCorrect)
+                                                                    : idx === optIndex,
+                                                            }));
+                                                            return { ...q, options: newOptions };
+                                                        }
+                                                        return q;
+                                                    });
+                                                    onChange({ ...quiz, questions: newQuestions });
+                                                }}
+                                                className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={option.text}
+                                                onChange={(e) => {
+                                                    const newQuestions = quiz.questions.map((q) => {
+                                                        if (q.id === question.id && q.options) {
+                                                            const newOptions = q.options.map((opt, idx) =>
+                                                                idx === optIndex ? { ...opt, text: e.target.value } : opt
+                                                            );
+                                                            return { ...q, options: newOptions };
+                                                        }
+                                                        return q;
+                                                    });
+                                                    onChange({ ...quiz, questions: newQuestions });
+                                                }}
+                                                placeholder={`Seçenek ${optIndex + 1}`}
+                                                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {question.type === 'open-ended' && (
+                            <div className="text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                                ℹ️ Açık uçlu sorular manuel olarak değerlendirilir.
+                            </div>
+                        )}
+                    </div>
                 </Accordion.Content>
             </div>
         </Accordion.Item>
@@ -170,6 +262,7 @@ const SortableQuestionItem: React.FC<SortableQuestionItemProps> = ({
 
 export const QuizEditor: React.FC<QuizEditorProps> = ({ quiz, onChange }) => {
     const [expandedQuestions, setExpandedQuestions] = useState<string[]>([]);
+    const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -218,7 +311,22 @@ export const QuizEditor: React.FC<QuizEditorProps> = ({ quiz, onChange }) => {
 
         onChange({ ...quiz, questions: [...quiz.questions, newQuestion] });
         setExpandedQuestions([...expandedQuestions, newQuestion.id]);
+        setEditingQuestionId(newQuestion.id);
         toast.success('Yeni soru eklendi');
+    };
+
+    const editQuestion = (questionId: string) => {
+        setEditingQuestionId(questionId);
+        if (!expandedQuestions.includes(questionId)) {
+            setExpandedQuestions([...expandedQuestions, questionId]);
+        }
+    };
+
+    const updateQuestion = (questionId: string, updates: Partial<QuizQuestion>) => {
+        const newQuestions = quiz.questions.map((q) =>
+            q.id === questionId ? { ...q, ...updates } : q
+        );
+        onChange({ ...quiz, questions: newQuestions });
     };
 
     const duplicateQuestion = (questionId: string) => {
@@ -252,7 +360,7 @@ export const QuizEditor: React.FC<QuizEditorProps> = ({ quiz, onChange }) => {
 
     const previewQuestion = (questionId: string) => {
         // TODO: Implement preview modal
-        toast.info('Önizleme özelliği yakında eklenecek');
+        toast('Önizleme özelliği yakında eklenecek', { icon: 'ℹ️' });
     };
 
     return (
@@ -376,7 +484,9 @@ export const QuizEditor: React.FC<QuizEditorProps> = ({ quiz, onChange }) => {
                                         key={question.id}
                                         question={question}
                                         index={index}
-                                        onEdit={() => {/* TODO: Open edit modal */ }}
+                                        quiz={quiz}
+                                        onChange={onChange}
+                                        onEdit={() => editQuestion(question.id)}
                                         onDuplicate={() => duplicateQuestion(question.id)}
                                         onDelete={() => deleteQuestion(question.id)}
                                         onPreview={() => previewQuestion(question.id)}

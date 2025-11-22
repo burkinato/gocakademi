@@ -2,12 +2,13 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../shared/Button';
 import { apiClient } from '../../services/api';
-import { CurriculumUnit, CurriculumItem, ContentType, QuizConfig, AttachmentResource } from '../../types';
+import { CurriculumUnit, CurriculumItem, ContentType, QuizConfig, AttachmentResource, FinalAssessment } from '../../types';
 import { toast } from 'react-hot-toast';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
-import { RichTextEditor } from './RichTextEditor';
-import { VideoDropzone } from './VideoDropzone';
-import { QuizBuilder } from './QuizBuilder';
+import { TipTapEditor } from './TipTapEditor';
+import { MediaUploadZone } from './MediaUploadZone';
+import { QuizEditor } from './QuizEditor';
+import { Quiz } from '../../types/quiz.types';
 
 const createInitialCurriculum = (): CurriculumUnit[] => [
   {
@@ -83,9 +84,7 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
   const [newItemRichText, setNewItemRichText] = useState('');
   const [newItemVideoAsset, setNewItemVideoAsset] = useState<CurriculumItem['videoAsset']>(null);
   const [newItemQuiz, setNewItemQuiz] = useState<QuizConfig>({ durationMinutes: 0, allowRetry: false, questions: [] });
-  const [newItemAttachments, setNewItemAttachments] = useState<AttachmentResource[]>([]);
-  const [newAttachmentName, setNewAttachmentName] = useState('');
-  const [newAttachmentUrl, setNewAttachmentUrl] = useState('');
+  const [finalAssessment, setFinalAssessment] = useState<FinalAssessment | null>(null);
   const [editingItem, setEditingItem] = useState<{ unitId: string; itemId: string } | null>(null);
   const [parentDrafts, setParentDrafts] = useState<Record<number, number | null>>({});
   const [saving, setSaving] = useState(false);
@@ -170,11 +169,11 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
         }));
         const sanitizedVideoAsset = item.videoAsset
           ? {
-              source: item.videoAsset.source,
-              name: item.videoAsset.name,
-              size: item.videoAsset.size,
-              mimeType: item.videoAsset.mimeType,
-            }
+            source: item.videoAsset.source,
+            name: item.videoAsset.name,
+            size: item.videoAsset.size,
+            mimeType: item.videoAsset.mimeType,
+          }
           : null;
         const sanitizedMetadata = {
           quiz: item.quiz || null,
@@ -225,9 +224,6 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
     setNewItemRichText('');
     setNewItemVideoAsset(null);
     setNewItemQuiz({ durationMinutes: 0, allowRetry: false, questions: [] });
-    setNewItemAttachments([]);
-    setNewAttachmentName('');
-    setNewAttachmentUrl('');
     setEditingItem(null);
   };
 
@@ -460,14 +456,13 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
       setNewItemRichText(editItem.richTextContent || '');
       setNewItemVideoAsset(editItem.videoAsset || (editItem.contentUrl && editItem.type === 'video'
         ? {
-            source: 'url',
-            name: editItem.contentUrl,
-            size: 0,
-            mimeType: 'text/url',
-          }
+          source: 'url',
+          name: editItem.contentUrl,
+          size: 0,
+          mimeType: 'text/url',
+        }
         : null));
       setNewItemQuiz(editItem.quiz || { durationMinutes: 0, allowRetry: false, questions: [] });
-      setNewItemAttachments(editItem.attachments || []);
     } else {
       setEditingItem(null);
       resetItemModal();
@@ -483,7 +478,6 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
     }
 
     const itemId = generateId();
-    const attachments = newItemAttachments.filter(att => att.name && (att.url || att.dataUrl));
 
     const videoContentUrl = newItemType === 'video'
       ? (newItemVideoAsset?.source === 'url' ? newItemVideoAsset.name : undefined)
@@ -501,10 +495,10 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
       textContent: newItemType === 'pdf' ? newItemContent : undefined,
       richTextContent: newItemType === 'text' ? newItemRichText : undefined,
       videoAsset: newItemType === 'video' ? newItemVideoAsset : null,
-      attachments,
+      attachments: [],
       quiz: newItemType === 'quiz' ? newItemQuiz : undefined,
       metadata: {
-        attachments,
+        attachments: [],
         quiz: newItemType === 'quiz' ? newItemQuiz : undefined,
       },
     };
@@ -547,24 +541,6 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
       return unit;
     }));
   };
-
-  const addAttachmentResource = () => {
-    if (!newAttachmentName || !newAttachmentUrl) return;
-    const resource: AttachmentResource = {
-      id: generateId(),
-      name: newAttachmentName,
-      url: newAttachmentUrl,
-      type: 'link',
-    };
-    setNewItemAttachments(prev => [...prev, resource]);
-    setNewAttachmentName('');
-    setNewAttachmentUrl('');
-  };
-
-  const removeAttachmentResource = (id: string) => {
-    setNewItemAttachments(prev => prev.filter(att => att.id !== id));
-  };
-
 
   const getIconForType = (type: ContentType) => {
     switch (type) {
@@ -919,22 +895,178 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
                 )}
               </Droppable>
             </DragDropContext>
+
+            {/* Final Assessment Section */}
+            <div className="mt-8 border-t-2 border-primary/20 pt-8">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-text-light dark:text-text-dark flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary">workspace_premium</span>
+                    Değerlendirme Sınavı
+                  </h3>
+                  <p className="text-sm text-subtext-light dark:text-subtext-dark mt-1">
+                    Eğitimin tamamlanması ve sertifika alınması için gerekli final sınavı
+                  </p>
+                </div>
+                {!finalAssessment && (
+                  <Button
+                    onClick={() => {
+                      const newAssessment: FinalAssessment = {
+                        id: generateId(),
+                        title: 'Final Değerlendirme Sınavı',
+                        description: 'Eğitimin tamamını kapsayan final sınavı',
+                        quiz: {
+                          durationMinutes: 60,
+                          allowRetry: false,
+                          shuffleQuestions: true,
+                          shuffleOptions: true,
+                          showCorrectAnswers: false,
+                          passingScore: 70,
+                          maxAttempts: 3,
+                          questions: [],
+                        },
+                        passingScore: 70,
+                        isRequired: true,
+                        certificateEligible: true,
+                      };
+                      setFinalAssessment(newAssessment);
+                      toast.success('Değerlendirme sınavı eklendi');
+                    }}
+                    variant="primary"
+                    icon={<span className="material-symbols-outlined text-[20px]">add_circle</span>}
+                  >
+                    Değerlendirme Sınavı Ekle
+                  </Button>
+                )}
+              </div>
+
+              {finalAssessment && (
+                <div className="bg-gradient-to-r from-primary/5 to-purple-500/5 dark:from-primary/10 dark:to-purple-500/10 border-2 border-primary/30 rounded-xl p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="material-symbols-outlined text-3xl text-primary">quiz</span>
+                        <div>
+                          <h4 className="text-lg font-bold text-text-light dark:text-text-dark">
+                            {finalAssessment.title}
+                          </h4>
+                          <p className="text-sm text-subtext-light dark:text-subtext-dark">
+                            {finalAssessment.description}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-3 mt-3">
+                        <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[16px]">schedule</span>
+                          {finalAssessment.quiz.durationMinutes} dakika
+                        </span>
+                        <span className="px-3 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full text-xs font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                          Geçme Notu: %{finalAssessment.passingScore}
+                        </span>
+                        <span className="px-3 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full text-xs font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[16px]">quiz</span>
+                          {finalAssessment.quiz.questions.length} Soru
+                        </span>
+                        {finalAssessment.certificateEligible && (
+                          <span className="px-3 py-1 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-full text-xs font-medium flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[16px]">workspace_premium</span>
+                            Sertifika Gerekli
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (confirm('Değerlendirme sınavını silmek istediğinizden emin misiniz?')) {
+                          setFinalAssessment(null);
+                          toast.success('Değerlendirme sınavı silindi');
+                        }
+                      }}
+                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg transition-colors"
+                      title="Sil"
+                    >
+                      <span className="material-symbols-outlined">delete</span>
+                    </button>
+                  </div>
+
+                  {/* Quiz Editor for Final Assessment */}
+                  <div className="mt-4 bg-white dark:bg-gray-900 rounded-lg p-4">
+                    <QuizEditor
+                      quiz={{
+                        id: finalAssessment.id,
+                        title: finalAssessment.title,
+                        description: finalAssessment.description || '',
+                        timeLimit: finalAssessment.quiz.durationMinutes,
+                        shuffleQuestions: finalAssessment.quiz.shuffleQuestions || false,
+                        shuffleOptions: finalAssessment.quiz.shuffleOptions || false,
+                        passingScore: finalAssessment.passingScore,
+                        showCorrectAnswers: finalAssessment.quiz.showCorrectAnswers || false,
+                        allowRetry: finalAssessment.quiz.allowRetry,
+                        maxAttempts: finalAssessment.quiz.maxAttempts || null,
+                        questions: finalAssessment.quiz.questions.map((q, idx) => ({
+                          id: q.id,
+                          type: 'multiple-choice' as const,
+                          text: q.prompt,
+                          points: q.points || 1,
+                          orderIndex: idx,
+                          options: q.options.map((opt, optIdx) => ({
+                            id: `opt-${idx}-${optIdx}`,
+                            text: opt,
+                            isCorrect: optIdx === q.answerIndex,
+                            orderIndex: optIdx,
+                          })),
+                          explanation: q.explanation,
+                        })),
+                      }}
+                      onChange={(quiz) => {
+                        setFinalAssessment({
+                          ...finalAssessment,
+                          title: quiz.title,
+                          description: quiz.description || '',
+                          passingScore: quiz.passingScore,
+                          quiz: {
+                            durationMinutes: quiz.timeLimit || 60,
+                            allowRetry: quiz.allowRetry,
+                            shuffleQuestions: quiz.shuffleQuestions,
+                            shuffleOptions: quiz.shuffleOptions,
+                            showCorrectAnswers: quiz.showCorrectAnswers,
+                            passingScore: quiz.passingScore,
+                            maxAttempts: quiz.maxAttempts,
+                            questions: quiz.questions.map(q => ({
+                              id: q.id,
+                              prompt: q.text,
+                              points: q.points,
+                              options: q.options?.map(opt => opt.text) || [],
+                              answerIndex: q.options?.findIndex(opt => opt.isCorrect) || 0,
+                              explanation: q.explanation,
+                            })),
+                          },
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Add Content Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 animate-fadeIn resize overflow-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-7xl max-h-[90vh] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col">
             <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="text-xl font-bold text-text-light dark:text-text-dark">{editingItem ? 'İçeriği Düzenle' : 'Yeni İçerik Ekle'}</h3>
+              <h3 className="text-xl font-bold text-text-light dark:text-text-dark">
+                {editingItem ? 'İçeriği Düzenle' : 'Yeni İçerik Ekle'}
+              </h3>
               <button onClick={() => { setIsModalOpen(false); resetItemModal(); }} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div className="p-6 flex flex-col gap-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {/* Content Type Selection */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-text-light dark:text-text-dark">İçerik Türü</label>
@@ -970,76 +1102,123 @@ export const AdminCreateCourse: React.FC<AdminCourseBuilderProps> = ({
 
                 {/* Conditional Fields Based on Type */}
                 {newItemType === 'video' && (
-                  <VideoDropzone value={newItemVideoAsset} onChange={setNewItemVideoAsset} />
+                  <MediaUploadZone
+                    type="video"
+                    value={newItemVideoAsset ? {
+                      source: newItemVideoAsset.source === 'url' ? 'url' : 'file',
+                      url: newItemVideoAsset.source === 'url' ? newItemVideoAsset.name : undefined,
+                      file: newItemVideoAsset.source === 'file' ? (newItemVideoAsset as any) : undefined,
+                      preview: newItemVideoAsset.source === 'file' ? newItemVideoAsset.name : undefined,
+                    } : null}
+                    onChange={(value) => {
+                      if (value) {
+                        setNewItemVideoAsset({
+                          source: value.source,
+                          name: value.source === 'url' ? value.url! : value.file!.name,
+                          size: value.source === 'file' ? value.file!.size : 0,
+                          mimeType: value.source === 'file' ? value.file!.type : 'text/url',
+                        });
+                        if (value.duration) {
+                          setNewItemDuration(String(Math.round(value.duration / 60)));
+                        }
+                      } else {
+                        setNewItemVideoAsset(null);
+                      }
+                    }}
+                  />
                 )}
 
+
                 {newItemType === 'pdf' && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-text-light dark:text-text-dark">PDF veya doküman bağlantısı</label>
-                    <input
-                      type="url"
-                      className="w-full rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 h-11 px-3"
-                      placeholder="https://docs.google.com/..."
-                      value={newItemContent}
-                      onChange={(e) => setNewItemContent(e.target.value)}
-                    />
-                    <p className="text-xs text-subtext-light dark:text-subtext-dark">İsterseniz dosya bağlantısını aşağıdaki kaynaklar bölümüne de ekleyebilirsiniz.</p>
-                  </div>
+                  <MediaUploadZone
+                    type="pdf"
+                    value={newItemContent ? {
+                      source: 'url',
+                      url: newItemContent,
+                    } : null}
+                    onChange={(value) => {
+                      if (value) {
+                        if (value.source === 'url') {
+                          setNewItemContent(value.url!);
+                        } else if (value.file) {
+                          // For file uploads, we'll need to handle the upload separately
+                          // For now, just store the file name
+                          setNewItemContent(value.file.name);
+                        }
+                      } else {
+                        setNewItemContent('');
+                      }
+                    }}
+                  />
                 )}
+
 
                 {newItemType === 'text' && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-text-light dark:text-text-dark">İçerik</label>
-                    <RichTextEditor
-                      value={newItemRichText}
+                    <TipTapEditor
+                      content={newItemRichText}
                       onChange={setNewItemRichText}
                       placeholder="Metninizi buraya yazın..."
                     />
                   </div>
                 )}
 
+
                 {newItemType === 'quiz' && (
-                  <QuizBuilder value={newItemQuiz} onChange={setNewItemQuiz} />
+                  <div className="space-y-4">
+                    <QuizEditor
+                      quiz={{
+                        id: generateId(),
+                        title: newItemTitle || 'Yeni Quiz',
+                        description: '',
+                        timeLimit: newItemQuiz.durationMinutes || null,
+                        shuffleQuestions: newItemQuiz.shuffleQuestions || false,
+                        shuffleOptions: newItemQuiz.shuffleOptions || false,
+                        passingScore: newItemQuiz.passingScore || 70,
+                        showCorrectAnswers: newItemQuiz.showCorrectAnswers !== false,
+                        allowRetry: newItemQuiz.allowRetry || false,
+                        maxAttempts: newItemQuiz.maxAttempts || null,
+                        questions: newItemQuiz.questions.map((q, idx) => ({
+                          id: q.id,
+                          type: 'multiple-choice' as const,
+                          text: q.prompt,
+                          points: q.points || 1,
+                          orderIndex: idx,
+                          options: q.options.map((opt, optIdx) => ({
+                            id: `opt-${idx}-${optIdx}`,
+                            text: opt,
+                            isCorrect: optIdx === q.answerIndex,
+                            orderIndex: optIdx,
+                          })),
+                          explanation: q.explanation,
+                        })),
+                      }}
+                      onChange={(quiz) => {
+                        setNewItemQuiz({
+                          durationMinutes: quiz.timeLimit || 0,
+                          allowRetry: quiz.allowRetry,
+                          shuffleQuestions: quiz.shuffleQuestions,
+                          shuffleOptions: quiz.shuffleOptions,
+                          showCorrectAnswers: quiz.showCorrectAnswers,
+                          passingScore: quiz.passingScore,
+                          maxAttempts: quiz.maxAttempts,
+                          questions: quiz.questions.map(q => ({
+                            id: q.id,
+                            prompt: q.text,
+                            points: q.points,
+                            options: q.options?.map(opt => opt.text) || [],
+                            answerIndex: q.options?.findIndex(opt => opt.isCorrect) || 0,
+                            explanation: q.explanation,
+                          })),
+                        });
+                      }}
+                    />
+                  </div>
                 )}
 
-                {/* Attachment Resources */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-text-light dark:text-text-dark">Ek Kaynaklar</span>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Kaynak adı"
-                        value={newAttachmentName}
-                        onChange={(e) => setNewAttachmentName(e.target.value)}
-                        className="form-input text-xs rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
-                      />
-                      <input
-                        type="url"
-                        placeholder="https://"
-                        value={newAttachmentUrl}
-                        onChange={(e) => setNewAttachmentUrl(e.target.value)}
-                        className="form-input text-xs rounded-lg border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
-                      />
-                      <Button size="sm" variant="outline" onClick={addAttachmentResource} disabled={!newAttachmentName || !newAttachmentUrl}>
-                        Ekle
-                      </Button>
-                    </div>
-                  </div>
-                  {newItemAttachments.length > 0 && (
-                    <ul className="space-y-2">
-                      {newItemAttachments.map(att => (
-                        <li key={att.id} className="flex items-center justify-between text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
-                          <span className="truncate">{att.name}</span>
-                          <button className="text-xs text-red-500 hover:text-red-700" onClick={() => removeAttachmentResource(att.id)}>
-                            Sil
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
 
+                {/* Duration Field */}
                 <label className="block">
                   <span className="text-sm font-medium text-text-light dark:text-text-dark">Süre / Soru Sayısı</span>
                   <input

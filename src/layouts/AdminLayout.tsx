@@ -28,7 +28,6 @@ export const AdminLayout: React.FC = () => {
         { key: 'users', label: 'Kullanıcılar', icon: Users, path: '/admin/users' },
         // Öğrenciler sayfası kaldırıldı; rol tabanlı yapı kullanılacak
         { key: 'courses', label: 'Eğitimler', icon: BookOpen, path: '/admin/courses' },
-        { key: 'projects', label: 'Proje Yönetimi', icon: Target, path: '/admin/projects' },
         { key: 'activity-logs', label: 'Aktivite Logları', icon: History, path: '/admin/activity-logs' },
         { key: 'reports', label: 'Raporlar', icon: Shield, path: '/admin/reports' },
     ];
@@ -60,11 +59,10 @@ export const AdminLayout: React.FC = () => {
                                 <button
                                     key={item.key}
                                     onClick={() => navigate(item.path)}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${
-                                        isActive(item.path)
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ${isActive(item.path)
                                             ? 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 text-blue-600 dark:text-blue-400 border-l-4 border-blue-600 dark:border-blue-400'
                                             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                                    }`}
+                                        }`}
                                 >
                                     <Icon className={`w-5 h-5 ${isActive(item.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
                                     <span className="text-sm font-medium">{item.label}</span>
